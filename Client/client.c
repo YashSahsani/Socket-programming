@@ -1,12 +1,16 @@
+#define _XOPEN_SOURCE 500
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
+#include <ftw.h>
 
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
+
+
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
