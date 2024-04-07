@@ -6,10 +6,41 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <ftw.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
 
+
+
+void receive_tar(int sock) {
+    char filename[BUFFER_SIZE] = "temp.tar.gz";
+
+    int file_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (file_fd == -1) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_received;
+    while ((bytes_received = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
+        if (write(file_fd, buffer, bytes_received) == -1) {
+            perror("Failed to write to file");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    if (bytes_received == -1) {
+        perror("Failed to receive tar");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Tar received and saved as %s\n", filename);
+
+    close(file_fd);
+}
 
 
 int main(int argc, char *argv[]) {
@@ -48,6 +79,11 @@ int main(int argc, char *argv[]) {
     fgets(message, BUFFER_SIZE, stdin);
     // Remove newline character from the message
     message[strcspn(message, "\n")] = 0;
+
+    if(strstr(message,"w24fz") != NULL){
+        receive_tar(sock);
+        continue;
+    }
 
     if (send(sock, message, strlen(message), 0) < 0) {
         perror("Failed to send message");
