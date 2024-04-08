@@ -23,6 +23,9 @@ char **filenames = NULL;
 int sizeGreaterThan = 0;
 char *TempCopyDestination = "/var/tmp/testZip110128863";
 int numFiles = 0;
+bool isSizeOption = false;
+bool isExtensionOption = false;
+char *extension[3];
 
 // Function prototypes
 int createTempDirectory();
@@ -154,96 +157,110 @@ int copyFile(const char *srcPath, const char *destPath)
     return EXIT_SUCCESS;
 }
 
+bool isFileExtensionInExtensions(const char *fpath)
+{
+
+    
+    char *fileExtension = strrchr(fpath, '.');
+    if (fileExtension != NULL)
+    {
+        int i =0;
+       while(extension[i] != NULL)
+        {
+            
+            if (strcmp(fileExtension, extension[i]) == 0)
+            {
+                printf("---------> Found extension %s\n", fpath);
+
+                return true;
+            }
+            i++;
+        }
+    }
+    return false;
+}
 static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
     {
-        if (sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
+        if (isSizeOption && sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
-            printf("%s\n", fpath);
-            numFiles++;
-            // Save the filenames in an array
+            printf("1");
+
             saveFileNamesInArray(fpath);
-            // Get just fileName and Create the destination path
-            char *name = fpath + ftwbuf->base;
-            char destPath[strlen(TempCopyDestination) + strlen(name) + 3];
-            sprintf(destPath, "%s/%s", TempCopyDestination, name);
-            // Copy the file to Temporary directory for zipping
-            int status = copyFile(fpath, destPath);
-            // check if file is copied or not
-            if (status == -1)
-            {
-                printf("Failed to copy file.\n");
-            }
+            printf("%s\n", filenames[numFiles - 1]);
+
             return EXIT_SUCCESS;
+        }
+        else if ( isExtensionOption && isFileExtensionInExtensions(fpath + ftwbuf->base))
+        {
+            printf("2");
+            saveFileNamesInArray(fpath);
+            
         }
     }
     return 0; // Continue traversal
 }
-int compressFiles(const char *destDir)
+
+int createTarFile()
 {
-    // Create the destination directory if it doesn't exist
-    char *command = malloc(strlen(destDir) + 100);
-    // Check if the memory was allocated successfully
+    // Calculate the total length of the command
+    if(numFiles == 0){
+        printf("No files found\n");
+        int fd = open("temp.tar.gz", O_CREAT | O_RDWR, DEFAULT_PERMISSIONS_FILE);
+        close(fd);
+        return 0;
+    }
+
+    size_t total_length = strlen("tar -czf ./temp.tar.gz ") + 1; // +1 for null terminator
+    for (int i = 0; i < numFiles; i++)
+    {
+        printf("Filename: %s\n", filenames[i]);
+        total_length += strlen(filenames[i]) + 1; // +1 for space separator
+    }
+    printf("Total length: %ld\n", total_length);
+
+    // Allocate memory for the command
+    char *command = (char *)malloc(total_length);
     if (command == NULL)
     {
-        perror("malloc");
-        return EXIT_FAILURE;
+        fprintf(stderr, "Failed to allocate memory\n");
+        return 1;
     }
-    // Check if the destination directory exists
-    if (access(destDir, F_OK) == -1)
+
+    // Initialize the command string
+    strcpy(command, "tar -czf ./temp.tar.gz ");
+
+    // Loop through the filenames and append them to the command
+    for (int i = 0; i < numFiles; i++)
     {
-        // Create the destination directory
-        sprintf(command, "mkdir -p \"%s\"", destDir);
-        printf("Creating destination directory: %s\n", destDir);
-        // Execute the command
-        int status = system(command);
-        // Check if the command was executed successfully
-        if (status == -1)
-        {
-            printf("Failed to create destination directory.\n");
-            perror("system");
-            return EXIT_FAILURE;
-        }
-        // Free the memory allocated for the command
-        free(command);
+        strcat(command, filenames[i]);
+        strcat(command, " ");
     }
-    // Create the command to compress the files
-    command = malloc(strlen(destDir) + strlen(TempCopyDestination) + 50);
-    // Check if the memory was allocated successfully
-    if (command == NULL)
-    {
-        perror("malloc");
-        return EXIT_FAILURE;
-    }
-    // Compress the files
-    sprintf(command, "tar -czf \"%s\"/temp.tar.gz -C %s .", destDir, TempCopyDestination);
-    // Execute the command
-    printf("Creating tar file at %s\n", command);
+    printf("Command: %s\n", command);
+
     int status = system(command);
     // Check if the command was executed successfully
     if (status == -1)
     {
+        fprintf(stderr, "Failed to create tar file.\n");
         perror("system");
-        return EXIT_FAILURE;
+       return EXIT_FAILURE;
     }
-    if (status == 0)
-    {
-        printf("Search Successful:Tar file created at %s\n", destDir);
-    }
-    else
-    {
-        printf("Failed to create a tar file at %s.\n", destDir);
-    }
-    // Free the memory allocated for the command
+
+    // Free the allocated memory
     free(command);
     return EXIT_SUCCESS;
 }
-void sendTarFileToClient(int client_socket) {
+
+void sendTarFileToClient(int client_socket)
+{
+    printf("Sending tar file to client\n");
     char tarPath[strlen(getcwd(NULL, 0)) + 15];
     sprintf(tarPath, "%s/temp.tar.gz", getcwd(NULL, 0));
     FILE *file = fopen(tarPath, "rb");
-     if (!file) {
+    if (!file)
+    {
         perror("Error opening file");
         return;
     }
@@ -251,20 +268,19 @@ void sendTarFileToClient(int client_socket) {
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     rewind(file);
-
+    printf("File size: %d\n", file_size);
     // Send the file size first
     send(client_socket, &file_size, sizeof(file_size), 0);
 
     char buffer[BUFFER_SIZE];
     size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0)
+    {
         send(client_socket, buffer, bytes_read, 0);
     }
 
     fclose(file);
 }
-
-
 
 void crequest(int client_socket)
 {
@@ -284,16 +300,12 @@ void crequest(int client_socket)
         valread = read(client_socket, buffer, BUFFER_SIZE);
         if (strstr(buffer, "w24fz") != NULL)
         {
+            isSizeOption = true;
             char *token = strtok(buffer, " ");
             token = strtok(NULL, " ");
             sizeGreaterThan = atoi(token);
             token = strtok(NULL, " ");
             sizeLessThan = atoi(token);
-            if (sizeGreaterThan > sizeLessThan)
-            {
-                send(client_socket, "Size greater than should be less than size less than", strlen("Size greater than should be less than size less than"), 0);
-                continue;
-            }
             // Create a temporary directory
             createTempDirectory();
 
@@ -303,17 +315,52 @@ void crequest(int client_socket)
                 perror("nftw");
                 exit(EXIT_FAILURE);
             }
-            if (numFiles == 0)
-            {
-                printf("Search Unsuccessful\n");
-                continue;
-            }
-            compressFiles(getcwd(NULL, 0));
+            
+
+            createTarFile();
 
             sendTarFileToClient(client_socket);
             // Remove the temporary directory
             removeTempDirectory();
-            // unlink("temp.tar.gz");
+            unlink("temp.tar.gz");
+            filenames = NULL;
+            numFiles = 0;
+            continue;
+        }
+        else if (strstr(buffer, "w24ft") != NULL)
+        {
+            isExtensionOption = true;
+            char *token = strtok(buffer, " ");
+            token = strtok(NULL, " ");
+            int i = 0;
+            while (token != NULL)
+            {
+                extension[i] = malloc(strlen(token) + 2); // Allocate memory for extension[i]
+                if (extension[i] == NULL)
+                {
+                    fprintf(stderr, "Failed to allocate memory\n");
+                    exit(EXIT_FAILURE);
+                }
+                strcpy(extension[i], ".");
+                strcat(extension[i], token);
+                printf("Extension %d: %s\n", i + 1, extension[i]);
+                token = strtok(NULL, " ");
+                i++;
+            }
+            printf("------> searching for files with extension\n");
+            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            {
+                perror("nftw");
+                exit(EXIT_FAILURE);
+            }
+            createTarFile();
+            printf("------> sending tar file\n");
+            sendTarFileToClient(client_socket);
+            // Remove the temporary directory
+            removeTempDirectory();
+            unlink("temp.tar.gz");
+            filenames = NULL;
+            numFiles = 0;
             continue;
         }
 
@@ -322,7 +369,6 @@ void crequest(int client_socket)
         {
             break;
         }
-
     }
 
     close(client_socket);
