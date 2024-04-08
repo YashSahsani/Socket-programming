@@ -14,13 +14,18 @@
 void receive_file(int server_socket) {
     char filename[] = "temp.tar.gz";
     FILE *file = fopen(filename, "wb");
-   if (!file) {
+    if (!file) {
         perror("Error opening file");
         return;
     }
 
     long file_size;
     recv(server_socket, &file_size, sizeof(file_size), 0);
+    printf("File size: %d\n", file_size);
+    if(file_size == 0){
+        printf("No file found\n");
+        return;
+    }
 
     char buffer[BUFFER_SIZE];
     size_t total_bytes_received = 0;
@@ -33,6 +38,55 @@ void receive_file(int server_socket) {
     fclose(file);
 }
 
+
+int validateCommand(char *command) {
+    // Check if the command starts with "w24ft"
+    if (strncmp(command, "w24ft", 5) == 0) {
+        
+    // Count the number of extensions after "w24ft"
+    int extensions = 0;
+    char *token = strtok(command, " ");
+    token = strtok(NULL, " "); // Skip the first token ("w24ft")
+    while (token != NULL) {
+        printf("%s\n", token);
+        extensions++;
+        token = strtok(NULL, " ");
+    }
+
+    // Check if there are between 1 and 3 extensions
+    if (extensions < 1 || extensions > 3) {
+        return 0; // Incorrect number of extensions
+    }
+    }else if(strncmp(command, "w24fz", 5) == 0){
+        int size1, size2;
+        char *extra;
+        char *token = strtok(command, " ");
+        token = strtok(NULL, " "); // Skip the first token ("w24fz")
+        size1 = atoi(token);
+
+        token = strtok(NULL, " "); // Get the second token
+        size2 = atoi(token);
+
+        token = strtok(NULL, " "); // Get the third token
+        extra = token;
+        if(extra != NULL){
+            return 0;
+        }
+
+
+        printf("%d %d\n", size1, size2);
+
+        if(size1 <= 0 || size2 <= 0 ){
+            return 0;
+        }
+        else if(size1 > size2){
+            return 0;
+        }
+
+    }
+
+    return 1; // Command is valid
+}
 
 
 int main(int argc, char *argv[]) {
@@ -75,6 +129,13 @@ int main(int argc, char *argv[]) {
         fgets(message, BUFFER_SIZE, stdin);
         // Remove newline character from the message
         message[strcspn(message, "\n")] = 0;
+
+        char *CommandCopy = strdup(message);
+        if (!validateCommand(CommandCopy)) {
+            printf("Invalid command\n");
+            continue;
+        }
+        
         
         if (send(sock, message, strlen(message), 0) < 0) {
             perror("Failed to send message");
@@ -82,6 +143,12 @@ int main(int argc, char *argv[]) {
         }
 
         if (strstr(message, "w24fz") != NULL) {
+          
+            receive_file(sock);
+            continue;
+        }
+         if (strstr(message, "w24ft") != NULL) {
+
             receive_file(sock);
             continue;
         }
