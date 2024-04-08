@@ -31,6 +31,8 @@ bool isSizeOption = false;
 bool isLessThanDateOption = false;
 bool isGreaterThanDateOption = false;
 bool isExtensionOption = false;
+bool getFileDetails = false;
+char *getDetailsOffile = NULL;
 char *extension[3];
 char *date = NULL;
 
@@ -46,6 +48,17 @@ int compressFiles(const char *destDir);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
 
+
+typedef struct FileDetails
+{
+    char *path;
+    int size;
+    char *createdAtdate;
+    char *permission;
+
+} FileDetails;
+
+FileDetails fileDetails;
 typedef struct
 {
     char ip_address[INET_ADDRSTRLEN];
@@ -218,6 +231,7 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
 {
     if (tflag == FTW_F)
     {
+
         if (isSizeOption && sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
 
@@ -253,6 +267,23 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
             {
                 saveFileNamesInArray(fpath);
             }
+        }
+        else if (getFileDetails && strcmp(fpath + ftwbuf->base, getDetailsOffile) == 0) {
+            fileDetails.path = fpath;
+            fileDetails.size = sb->st_size;
+            struct tm *timeinfo;
+            timeinfo = localtime(&sb->st_mtime);
+            char dateStr[11];
+            strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);   
+            fileDetails.createdAtdate = dateStr;
+            fileDetails.permission = malloc(10);
+            sprintf(fileDetails.permission, "%o", sb->st_mode & 0777);
+            printf("File path: %s\n", fileDetails.path);
+            printf("File size: %d\n", fileDetails.size);
+            printf("File created at: %s\n", fileDetails.createdAtdate);
+            printf("File permission: %s\n", fileDetails.permission);
+            numFiles++;
+            return 0;
         }
     }
     return 0; // Continue traversal
@@ -380,6 +411,7 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
+            isSizeOption = false;
             continue;
         }
         else if (strstr(buffer, "w24ft") != NULL)
@@ -416,6 +448,7 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
+            isExtensionOption = false;
             continue;
         }
         else if (strstr(buffer, "w24fdb") != NULL)
@@ -442,6 +475,7 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
+            isLessThanDateOption = false;
             continue;
         }
         else if (strstr(buffer, "w24fda") != NULL)
@@ -463,11 +497,34 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
+            isGreaterThanDateOption = false;
             continue;
         }
-        else if (strstr(buffer, "quitc") != NULL)
+        else if (strstr(buffer, "w24fn") != NULL)
         {
-            break;
+            char *token = strtok(buffer, " ");
+            token = strtok(NULL, " ");
+            getDetailsOffile = token;
+            printf("File to get details: %s\n", getDetailsOffile);
+            getFileDetails = true;
+            if(nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            {
+                perror("nftw");
+                exit(EXIT_FAILURE);
+            }
+
+            if(numFiles == 1){
+                send(client_socket,&fileDetails,sizeof(fileDetails),0);
+
+            }
+            getFileDetails = false;
+            getDetailsOffile = NULL;
+            numFiles = 0;
+            fileDetails.path = NULL;
+            fileDetails.size = 0;
+            fileDetails.createdAtdate = NULL;
+            fileDetails.permission = NULL;
+            continue;
         }
 
         // Check for quitc command

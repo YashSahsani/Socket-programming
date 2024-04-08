@@ -12,6 +12,14 @@
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
 
+typedef struct FileDetails
+{
+    char *path;
+    int size;
+    char *createdAtdate;
+    char *permission;
+
+} FileDetails;
 typedef struct 
 {
     char ip_address[MAX_IP_LENGTH];
@@ -235,6 +243,21 @@ int validateCommand(char *command)
         }
     }
 
+    else if (strncmp(command, "w24fn", 5) == 0)
+    {
+      
+        char *extra;
+        char *token = strtok(command, " ");
+        token = strtok(NULL, " "); // Skip the first token ("w24fn")
+        char *fileName = token;
+        token = strtok(NULL, " "); // Get the third token
+        extra = token;
+        if (extra != NULL)
+        {
+            printf("Invalid command format.\n");
+            return 0;
+        }
+    }
     else{
         return 0;
     }
@@ -330,7 +353,7 @@ int main(int argc, char *argv[])
             printf("Invalid command\n");
             continue;
         }
-
+        printf("Command: %s \n", message);
         if (send(sock, message, strlen(message), 0) < 0)
         {
             perror("Failed to send message");
@@ -359,6 +382,20 @@ int main(int argc, char *argv[])
         {
 
             receive_file(sock);
+            continue;
+        }
+        if(strstr(message, "w24fn") != NULL){
+            printf("Receiving file details\n");
+            FileDetails fileDetails;
+            recv(sock, &fileDetails, sizeof(FileDetails), 0);
+            if(fileDetails.path == NULL){
+                printf("No file found\n");
+                continue;
+            }
+            printf("File Path: %s\n", fileDetails.path);
+            printf("File Size: %d\n", fileDetails.size);
+            printf("File Created At: %s\n", fileDetails.createdAtdate);
+            printf("File Permission: %s\n", fileDetails.permission);
             continue;
         }
 
