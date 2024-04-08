@@ -1,21 +1,40 @@
 #define _XOPEN_SOURCE 500 // Required for nftw function
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ftw.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <ftw.h>
+#include <fcntl.h>
+#include <stdbool.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 #define TEMP_DIRECTORY_PREMISSIONS 0700
+#define DEFAULT_UMASK 0022
+#define NEW_UMASK 0000
+#define DEFAULT_PERMISSIONS_FILE 0666
+
 int sizeLessThan = 0;
+bool zipOption = false;
 char **filenames = NULL;
 int sizeGreaterThan = 0;
 char *TempCopyDestination = "/var/tmp/testZip110128863";
 int numFiles = 0;
 
+// Function prototypes
+int createTempDirectory();
+int removeTempDirectory();
+int saveFileNamesInArray(const char *fpath);
+int copyFile(const char *srcPath, const char *destPath);
+static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf);
+int compressFiles(const char *destDir);
+void sendTarFileToClient(int client_socket);
+void crequest(int client_socket);
+
+// Rest of your code...
 // create a temporary directory
 int createTempDirectory()
 {
@@ -82,7 +101,7 @@ int saveFileNamesInArray(const char *fpath)
 int copyFile(const char *srcPath, const char *destPath)
 {
     // Set the umask to 0000
-    umask(SET_UMASK);
+    umask(NEW_UMASK);
     // Open the source file for reading
     int sourceFile = open(srcPath, O_RDONLY);
     if (sourceFile == -1)
@@ -141,6 +160,7 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
     {
         if (sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
+            printf("%s\n", fpath);
             numFiles++;
             // Save the filenames in an array
             saveFileNamesInArray(fpath);
@@ -197,8 +217,9 @@ int compressFiles(const char *destDir)
         return EXIT_FAILURE;
     }
     // Compress the files
-    sprintf(command, "tar -cf \"%s\"/temp.tar.gz -C %s .", destDir, TempCopyDestination);
+    sprintf(command, "tar -czf \"%s\"/temp.tar.gz -C %s .", destDir, TempCopyDestination);
     // Execute the command
+    printf("Creating tar file at %s\n", command);
     int status = system(command);
     // Check if the command was executed successfully
     if (status == -1)
@@ -218,43 +239,33 @@ int compressFiles(const char *destDir)
     free(command);
     return EXIT_SUCCESS;
 }
-
-void sendTarFileToClient(int client_socket)
-{
-    // Send the tar file to the client
+void sendTarFileToClient(int client_socket) {
     char tarPath[strlen(getcwd(NULL, 0)) + 15];
     sprintf(tarPath, "%s/temp.tar.gz", getcwd(NULL, 0));
-
-    FILE *tarFile = fopen(tarPath, "rb");
-    if (tarFile == NULL)
-    {
-        perror("Failed to open tar file");
-        return EXIT_FAILURE;
+    FILE *file = fopen(tarPath, "rb");
+     if (!file) {
+        perror("Error opening file");
+        return;
     }
 
-    // Get the size of the tar file
-    fseek(tarFile, 0, SEEK_END);
-    long int tarSize = ftell(tarFile);
-    rewind(tarFile);
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    rewind(file);
 
-    // Send the tar file size to the client
-    send(client_socket, &tarSize, sizeof(tarSize), 0);
+    // Send the file size first
+    send(client_socket, &file_size, sizeof(file_size), 0);
 
-    // Send the tar file to the client in chunks
     char buffer[BUFFER_SIZE];
-    size_t bytesRead;
-    while ((bytesRead = fread(buffer, 1, sizeof(buffer), tarFile)) > 0)
-    {
-        if (send(client_socket, buffer, bytesRead, 0) == -1)
-        {
-            perror("Failed to send tar file");
-            fclose(tarFile);
-            return EXIT_FAILURE;
-        }
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        send(client_socket, buffer, bytes_read, 0);
     }
 
-    fclose(tarFile);
+    fclose(file);
 }
+
+
+
 void crequest(int client_socket)
 {
     char buffer[BUFFER_SIZE] = {0};
@@ -271,7 +282,6 @@ void crequest(int client_socket)
     {
         // Read data from the client
         valread = read(client_socket, buffer, BUFFER_SIZE);
-        printf("Received: %s\n", buffer);
         if (strstr(buffer, "w24fz") != NULL)
         {
             char *token = strtok(buffer, " ");
@@ -293,17 +303,18 @@ void crequest(int client_socket)
                 perror("nftw");
                 exit(EXIT_FAILURE);
             }
-            if (strlen(filenames) == 0)
+            if (numFiles == 0)
             {
                 printf("Search Unsuccessful\n");
-                return EXIT_FAILURE;
+                continue;
             }
             compressFiles(getcwd(NULL, 0));
 
             sendTarFileToClient(client_socket);
             // Remove the temporary directory
             removeTempDirectory();
-            unlink("temp.tar.gz");
+            // unlink("temp.tar.gz");
+            continue;
         }
 
         // Check for quitc command
@@ -312,10 +323,6 @@ void crequest(int client_socket)
             break;
         }
 
-        // Perform action required to process the command (not specified in the description)
-        // For now, just send a response to the client
-        send(client_socket, hello, strlen(hello), 0);
-        printf("Hello message sent\n");
     }
 
     close(client_socket);
