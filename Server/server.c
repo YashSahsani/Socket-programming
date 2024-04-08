@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <time.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -24,8 +25,11 @@ int sizeGreaterThan = 0;
 char *TempCopyDestination = "/var/tmp/testZip110128863";
 int numFiles = 0;
 bool isSizeOption = false;
+bool isLessThanDateOption = false;
+bool isGreaterThanDateOption = false;
 bool isExtensionOption = false;
 char *extension[3];
+char *date = NULL;
 
 // Function prototypes
 int createTempDirectory();
@@ -157,17 +161,36 @@ int copyFile(const char *srcPath, const char *destPath)
     return EXIT_SUCCESS;
 }
 
+int checkDate(char *givenDate, char *fileDate)
+{
+    const char *dateFormat = "%Y-%m-%d";
+
+    // Convert givenDate to time_t
+    struct tm givenDateStruct = {0};
+    strptime(givenDate, dateFormat, &givenDateStruct);
+    time_t givenDateInSeconds = mktime(&givenDateStruct);
+
+    // Convert fileDate to time_t
+    struct tm fileDateStruct = {0};
+    strptime(fileDate, dateFormat, &fileDateStruct);
+    time_t fileDateInSeconds = mktime(&fileDateStruct);
+
+    // Calculate the difference in days
+    double difference = difftime(givenDateInSeconds, fileDateInSeconds);
+    int daysDifference = difference / (60 * 60 * 24);
+
+    return daysDifference;
+}
 bool isFileExtensionInExtensions(const char *fpath)
 {
 
-    
     char *fileExtension = strrchr(fpath, '.');
     if (fileExtension != NULL)
     {
-        int i =0;
-       while(extension[i] != NULL)
+        int i = 0;
+        while (extension[i] != NULL)
         {
-            
+
             if (strcmp(fileExtension, extension[i]) == 0)
             {
                 printf("---------> Found extension %s\n", fpath);
@@ -185,18 +208,39 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
     {
         if (isSizeOption && sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
-            printf("1");
 
             saveFileNamesInArray(fpath);
             printf("%s\n", filenames[numFiles - 1]);
 
             return EXIT_SUCCESS;
         }
-        else if ( isExtensionOption && isFileExtensionInExtensions(fpath + ftwbuf->base))
+        else if (isExtensionOption && isFileExtensionInExtensions(fpath + ftwbuf->base))
         {
-            printf("2");
             saveFileNamesInArray(fpath);
-            
+        }
+        else if (isLessThanDateOption)
+        {
+            struct tm *timeinfo;
+            timeinfo = localtime(&sb->st_mtime);
+            char dateStr[11];
+            strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
+            int daysDifference = checkDate(date, dateStr);
+            if (daysDifference >= 0)
+            {
+                saveFileNamesInArray(fpath);
+            }
+        }
+        else if (isGreaterThanDateOption)
+        {
+            struct tm *timeinfo;
+            timeinfo = localtime(&sb->st_mtime);
+            char dateStr[11];
+            strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
+            int daysDifference = checkDate(date, dateStr);
+            if (daysDifference <= 0)
+            {
+                saveFileNamesInArray(fpath);
+            }
         }
     }
     return 0; // Continue traversal
@@ -205,7 +249,8 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
 int createTarFile()
 {
     // Calculate the total length of the command
-    if(numFiles == 0){
+    if (numFiles == 0)
+    {
         printf("No files found\n");
         int fd = open("temp.tar.gz", O_CREAT | O_RDWR, DEFAULT_PERMISSIONS_FILE);
         close(fd);
@@ -215,10 +260,8 @@ int createTarFile()
     size_t total_length = strlen("tar -czf ./temp.tar.gz ") + 1; // +1 for null terminator
     for (int i = 0; i < numFiles; i++)
     {
-        printf("Filename: %s\n", filenames[i]);
         total_length += strlen(filenames[i]) + 1; // +1 for space separator
     }
-    printf("Total length: %ld\n", total_length);
 
     // Allocate memory for the command
     char *command = (char *)malloc(total_length);
@@ -245,8 +288,9 @@ int createTarFile()
     {
         fprintf(stderr, "Failed to create tar file.\n");
         perror("system");
-       return EXIT_FAILURE;
+        return EXIT_FAILURE;
     }
+    sleep(5);
 
     // Free the allocated memory
     free(command);
@@ -315,7 +359,6 @@ void crequest(int client_socket)
                 perror("nftw");
                 exit(EXIT_FAILURE);
             }
-            
 
             createTarFile();
 
@@ -347,14 +390,14 @@ void crequest(int client_socket)
                 token = strtok(NULL, " ");
                 i++;
             }
-            printf("------> searching for files with extension\n");
+
             if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
             }
             createTarFile();
-            printf("------> sending tar file\n");
+
             sendTarFileToClient(client_socket);
             // Remove the temporary directory
             removeTempDirectory();
@@ -362,6 +405,57 @@ void crequest(int client_socket)
             filenames = NULL;
             numFiles = 0;
             continue;
+        }
+        else if (strstr(buffer, "w24fdb") != NULL)
+        {
+            printf("Buffer: %s\n", buffer);
+            sleep(1);
+            char *token = strtok(buffer, " ");
+            token = strtok(NULL, " ");
+            date = token;
+            isLessThanDateOption = true;
+            sleep(1);
+            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            {
+                perror("nftw");
+                exit(EXIT_FAILURE);
+            }
+            createTarFile();
+            printf("---->Tar file created\n");
+            sleep(5);
+
+            sendTarFileToClient(client_socket);
+            // Remove the temporary directory
+            removeTempDirectory();
+            unlink("temp.tar.gz");
+            filenames = NULL;
+            numFiles = 0;
+            continue;
+        }
+        else if (strstr(buffer, "w24fda") != NULL)
+        {
+            char *token = strtok(buffer, " ");
+            token = strtok(NULL, " ");
+            date = token;
+            isGreaterThanDateOption = true;
+            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            {
+                perror("nftw");
+                exit(EXIT_FAILURE);
+            }
+            createTarFile();
+
+            sendTarFileToClient(client_socket);
+            // Remove the temporary directory
+            removeTempDirectory();
+            unlink("temp.tar.gz");
+            filenames = NULL;
+            numFiles = 0;
+            continue;
+        }
+        else if (strstr(buffer, "quitc") != NULL)
+        {
+            break;
         }
 
         // Check for quitc command
