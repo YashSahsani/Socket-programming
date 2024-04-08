@@ -34,8 +34,7 @@ bool isExtensionOption = false;
 char *extension[3];
 char *date = NULL;
 
-
-int countNumberOfConnections = 0;
+int countNumberOfConnections = 1;
 // Function prototypes
 int createTempDirectory();
 int removeTempDirectory();
@@ -45,13 +44,6 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
 int compressFiles(const char *destDir);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
-
-typedef struct
-{
-    char ip_address[INET_ADDRSTRLEN];
-    int port_number;
-} server_address_info;
-
 
 // Rest of your code...
 // create a temporary directory
@@ -481,56 +473,6 @@ void crequest(int client_socket)
 }
 
 
-char* redirectToMirror(){
-     if (countNumberOfConnections <= 3)
-        {
-           return "Server";
-          
-        }
-        else if (countNumberOfConnections > 3 && countNumberOfConnections <= 6)
-        {
-            return "Mirror1";
-           
-        }
-        else if (countNumberOfConnections > 6 && countNumberOfConnections <= 9)
-        {
-            return "Mirror2";
-           
-        }
-        else
-        {
-            int remiander = countNumberOfConnections % 3;
-            if (remiander == 1)
-            {
-                return "Server";
-                
-            }
-            else if (remiander == 2)
-            {
-                return "Mirror1";
-                
-            }
-            else
-            {
-                return "Mirror2";
-              
-            }
-           
-        }
-        
-
-}
-void connectClientToMirror(int client_sock, int mirror_port) {
-    server_address_info address_info;
-    long redirect = 1;
-    send(client_sock, &redirect, sizeof(redirect), 0);
-    // Send address of mirror and transfer client to that location
-    strcpy(address_info.ip_address, "127.0.0.1");
-    address_info.port_number = mirror_port;
-    send(client_sock, &address_info, sizeof(server_address_info), 0);
-    printf("Client number: %d has been redirected to Mirror%d\n", countNumberOfConnections, mirror_port == MIRROR1_PORT ? 1 : 2);
-}
-
 
 int main()
 {
@@ -555,7 +497,7 @@ int main()
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(MIRROR2_PORT);
 
     // Bind the socket to the specified IP and port
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
@@ -570,38 +512,18 @@ int main()
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
+    
 
-    printf("Server listening on port %d\n", PORT);
+    printf("Server listening on port %d\n", MIRROR2_PORT);
     while (1)
     {
         // Accept incoming connections
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
         {
-
             perror("accept failed");
             exit(EXIT_FAILURE);
         }
-        // Get the client IP address
- 
- 
-        char* destination = redirectToMirror();
         countNumberOfConnections++;
-        printf("Connection number: %d\n", countNumberOfConnections);
-        printf("Destination: %s\n", destination);
-        if(strcmp(destination, "Mirror1") == 0){
-            printf("Redirecting to Mirror1\n");
-            connectClientToMirror(new_socket, MIRROR1_PORT);
-            close(new_socket);
-            continue;
-        }else if(strcmp(destination, "Mirror2") == 0){
-            printf("Redirecting to Mirror2\n");
-            connectClientToMirror(new_socket, MIRROR2_PORT);
-            close(new_socket);
-            continue;
-        }else{
-            int server = 0;
-            send(new_socket, &server,sizeof(server) , 0);
-        }
         // Fork a child process to handle the client request
         if (fork() == 0)
         {

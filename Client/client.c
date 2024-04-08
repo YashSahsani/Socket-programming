@@ -12,6 +12,12 @@
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
 
+typedef struct 
+{
+    char ip_address[MAX_IP_LENGTH];
+    int port_number;
+} mirrorInfo;
+
 void receive_file(int server_socket)
 {
     char filename[] = "temp.tar.gz";
@@ -229,7 +235,33 @@ int validateCommand(char *command)
         }
     }
 
+    else{
+        return 0;
+    }
     return 1; // Command is valid
+}
+
+int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort) {
+    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket < 0) {
+        printf("Cannot create client socket\n");
+        exit(1);
+    }
+
+    struct sockaddr_in mirrorAddress;
+    mirrorAddress.sin_family = AF_INET;
+    mirrorAddress.sin_port = htons(mirrorPort);
+    if (inet_pton(AF_INET, mirrorIp, &mirrorAddress.sin_addr) <= 0) {
+        printf("Err: Wrong Mirror Address\n");
+        exit(1);
+    }
+
+    if (connect(clientSocket, (struct sockaddr *)&mirrorAddress, sizeof(mirrorAddress)) < 0) {
+        printf("Err: Cannot conect to mirror.\n");
+        exit(1);
+    }
+
+    return clientSocket;
 }
 
 int main(int argc, char *argv[])
@@ -267,8 +299,21 @@ int main(int argc, char *argv[])
         perror("Failed to connect to server");
         exit(EXIT_FAILURE);
     }
+    long res = 0;
+    recv(sock, &res, sizeof(res), 0);
+    if(res == 1){
+        printf("Will be redirected to mirror.\n");
+        mirrorInfo transferToMirror;
+        recv(sock, &transferToMirror, sizeof(mirrorInfo), 0);
+        close(sock);
+        sock = ConnectToMirrorServer(transferToMirror.ip_address, transferToMirror.port_number);
+        printf("Connected to mirror server now!\n");
+    }else {
+          printf("Connected to Server!\n");
+    }
 
-    printf("Connected to server\n");
+
+  
 
     char message[BUFFER_SIZE];
     while (true)
@@ -317,22 +362,6 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        char buffer[BUFFER_SIZE] = {0};
-        ssize_t bytes_received;
-        if ((bytes_received = recv(sock, buffer, BUFFER_SIZE, 0)) <= 0)
-        {
-            if (bytes_received == 0)
-            {
-                printf("Connection closed by peer\n");
-            }
-            else
-            {
-                perror("Failed to receive response");
-            }
-            exit(EXIT_FAILURE);
-        }
-
-        printf("Server response: %s\n", buffer);
     }
 
     close(sock);
