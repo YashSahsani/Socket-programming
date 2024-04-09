@@ -31,11 +31,9 @@ bool isSizeOption = false;
 bool isLessThanDateOption = false;
 bool isGreaterThanDateOption = false;
 bool isExtensionOption = false;
-bool getFileDetails = false;
-char *getDetailsOffile = NULL;
 char *extension[3];
 char *date = NULL;
-
+char fileDetailsString[1500];
 
 int countNumberOfConnections = 0;
 // Function prototypes
@@ -49,22 +47,12 @@ void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
 
 
-typedef struct FileDetails
-{
-    char *path;
-    int size;
-    char *createdAtdate;
-    char *permission;
 
-} FileDetails;
-
-FileDetails fileDetails;
 typedef struct
 {
     char ip_address[INET_ADDRSTRLEN];
     int port_number;
 } server_address_info;
-
 
 // Rest of your code...
 // create a temporary directory
@@ -231,7 +219,6 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
 {
     if (tflag == FTW_F)
     {
-
         if (isSizeOption && sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
 
@@ -268,26 +255,63 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
                 saveFileNamesInArray(fpath);
             }
         }
-        else if (getFileDetails && strcmp(fpath + ftwbuf->base, getDetailsOffile) == 0) {
-            fileDetails.path = fpath;
-            fileDetails.size = sb->st_size;
-            struct tm *timeinfo;
-            timeinfo = localtime(&sb->st_mtime);
-            char dateStr[11];
-            strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);   
-            fileDetails.createdAtdate = dateStr;
-            fileDetails.permission = malloc(10);
-            sprintf(fileDetails.permission, "%o", sb->st_mode & 0777);
-            printf("File path: %s\n", fileDetails.path);
-            printf("File size: %d\n", fileDetails.size);
-            printf("File created at: %s\n", fileDetails.createdAtdate);
-            printf("File permission: %s\n", fileDetails.permission);
-            numFiles++;
-            return 0;
-        }
     }
     return 0; // Continue traversal
 }
+
+void getFileDetails(const char *filename)
+{
+    // Find the first occurrence of the file and get its path
+    char find_command[256];
+    snprintf(find_command, sizeof(find_command), "find ~ -name %s | head -n 1", filename);
+
+    FILE *find_fp = popen(find_command, "r");
+    if (find_fp == NULL)
+    {
+        perror("Failed to execute find command");
+        return;
+    }
+
+    char file_path[256];
+    if (fgets(file_path, sizeof(file_path), find_fp) == NULL)
+    {
+        sprintf(fileDetailsString, "%s","File not found\n");
+        printf("File not found\n");
+        pclose(find_fp);
+        return;
+    }
+    pclose(find_fp);
+
+    // Get the file details using ls command
+    char ls_command[256];
+    snprintf(ls_command, sizeof(ls_command), "ls -l --time-style=long-iso %s", file_path);
+
+    FILE *ls_fp = popen(ls_command, "r");
+    if (ls_fp == NULL)
+    {
+        perror("Failed to execute ls command");
+        return;
+    }
+
+    char line[256];
+    if (fgets(line, sizeof(line), ls_fp) != NULL)
+    {
+        char permissions[10], size[20], date_created[20], file_name[256];
+        sscanf(line, "%s %*d %*s %*s %s %s %s %s", permissions, size, date_created, file_name);
+        printf("File path: %s\n", file_path);
+        printf("Permissions: %s\n", permissions);
+        printf("Size: %s\n", size);
+        printf("Date created: %s\n", date_created);
+        sprintf(fileDetailsString, "%s;%s;%s;%s", file_path, size, date_created, permissions);
+    }
+    else
+    {
+        printf("Failed to get file details\n");
+    }
+
+    pclose(ls_fp);
+}
+
 
 int createTarFile()
 {
@@ -504,26 +528,11 @@ void crequest(int client_socket)
         {
             char *token = strtok(buffer, " ");
             token = strtok(NULL, " ");
-            getDetailsOffile = token;
-            printf("File to get details: %s\n", getDetailsOffile);
-            getFileDetails = true;
-            if(nftw(homePath, display_info, 20, FTW_PHYS) == -1)
-            {
-                perror("nftw");
-                exit(EXIT_FAILURE);
-            }
-
-            if(numFiles == 1){
-                send(client_socket,&fileDetails,sizeof(fileDetails),0);
-
-            }
-            getFileDetails = false;
-            getDetailsOffile = NULL;
-            numFiles = 0;
-            fileDetails.path = NULL;
-            fileDetails.size = 0;
-            fileDetails.createdAtdate = NULL;
-            fileDetails.permission = NULL;
+            char *getDetailsOffile = token;
+            getFileDetails(getDetailsOffile);
+            send(client_socket, &fileDetailsString, strlen(fileDetailsString), 0);
+            buffer[0] = '\0';
+            fileDetailsString[0] = '\0';
             continue;
         }
 
@@ -537,47 +546,39 @@ void crequest(int client_socket)
     close(client_socket);
 }
 
-
-char* redirectToMirror(){
-     if (countNumberOfConnections <= 3)
+char *redirectToMirror()
+{
+    if (countNumberOfConnections <= 3)
+    {
+        return "Server";
+    }
+    else if (countNumberOfConnections > 3 && countNumberOfConnections <= 6)
+    {
+        return "Mirror1";
+    }
+    else if (countNumberOfConnections > 6 && countNumberOfConnections <= 9)
+    {
+        return "Mirror2";
+    }
+    else
+    {
+        int remiander = countNumberOfConnections % 3;
+        if (remiander == 1)
         {
-           return "Server";
-          
+            return "Server";
         }
-        else if (countNumberOfConnections > 3 && countNumberOfConnections <= 6)
+        else if (remiander == 2)
         {
             return "Mirror1";
-           
-        }
-        else if (countNumberOfConnections > 6 && countNumberOfConnections <= 9)
-        {
-            return "Mirror2";
-           
         }
         else
         {
-            int remiander = countNumberOfConnections % 3;
-            if (remiander == 1)
-            {
-                return "Server";
-                
-            }
-            else if (remiander == 2)
-            {
-                return "Mirror1";
-                
-            }
-            else
-            {
-                return "Mirror2";
-              
-            }
-           
+            return "Mirror2";
         }
-        
-
+    }
 }
-void connectClientToMirror(int client_sock, int mirror_port) {
+void connectClientToMirror(int client_sock, int mirror_port)
+{
     server_address_info address_info;
     long redirect = 1;
     send(client_sock, &redirect, sizeof(redirect), 0);
@@ -587,7 +588,6 @@ void connectClientToMirror(int client_sock, int mirror_port) {
     send(client_sock, &address_info, sizeof(server_address_info), 0);
     printf("Client number: %d has been redirected to Mirror%d\n", countNumberOfConnections, mirror_port == MIRROR1_PORT ? 1 : 2);
 }
-
 
 int main()
 {
@@ -639,25 +639,29 @@ int main()
             exit(EXIT_FAILURE);
         }
         // Get the client IP address
- 
- 
-        char* destination = redirectToMirror();
+
+        char *destination = redirectToMirror();
         countNumberOfConnections++;
         printf("Connection number: %d\n", countNumberOfConnections);
         printf("Destination: %s\n", destination);
-        if(strcmp(destination, "Mirror1") == 0){
+        if (strcmp(destination, "Mirror1") == 0)
+        {
             printf("Redirecting to Mirror1\n");
             connectClientToMirror(new_socket, MIRROR1_PORT);
             close(new_socket);
             continue;
-        }else if(strcmp(destination, "Mirror2") == 0){
+        }
+        else if (strcmp(destination, "Mirror2") == 0)
+        {
             printf("Redirecting to Mirror2\n");
             connectClientToMirror(new_socket, MIRROR2_PORT);
             close(new_socket);
             continue;
-        }else{
+        }
+        else
+        {
             int server = 0;
-            send(new_socket, &server,sizeof(server) , 0);
+            send(new_socket, &server, sizeof(server), 0);
         }
         // Fork a child process to handle the client request
         if (fork() == 0)

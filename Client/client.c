@@ -12,15 +12,8 @@
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
 
-typedef struct FileDetails
-{
-    char *path;
-    int size;
-    char *createdAtdate;
-    char *permission;
 
-} FileDetails;
-typedef struct 
+typedef struct
 {
     char ip_address[MAX_IP_LENGTH];
     int port_number;
@@ -57,27 +50,37 @@ void receive_file(int server_socket)
     fclose(file);
 }
 
-bool isValidDate(char *dateStr) {
+bool isValidDate(char *dateStr)
+{
     int year, month, day;
-    if (sscanf(dateStr, "%d-%d-%d", &year, &month, &day) != 3) {
+    if (sscanf(dateStr, "%d-%d-%d", &year, &month, &day) != 3)
+    {
         return false;
     }
 
-    if (year < 1 || month < 1 || month > 12 || day < 1) {
+    if (year < 1 || month < 1 || month > 12 || day < 1)
+    {
         return false;
     }
 
-    if ((month == 4 || month == 6 || month == 9 || month == 11) && (day > 30)) {
+    if ((month == 4 || month == 6 || month == 9 || month == 11) && (day > 30))
+    {
         return false;
     }
 
-    if (month == 2) {
-        if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) {
-            if (day > 29) {
+    if (month == 2)
+    {
+        if ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))
+        {
+            if (day > 29)
+            {
                 return false;
             }
-        } else {
-            if (day > 28) {
+        }
+        else
+        {
+            if (day > 28)
+            {
                 return false;
             }
         }
@@ -195,7 +198,8 @@ int validateCommand(char *command)
             return 0;
         }
 
-        if(!isValidDate(date)){
+        if (!isValidDate(date))
+        {
             return 0;
         }
 
@@ -245,7 +249,7 @@ int validateCommand(char *command)
 
     else if (strncmp(command, "w24fn", 5) == 0)
     {
-      
+
         char *extra;
         char *token = strtok(command, " ");
         token = strtok(NULL, " "); // Skip the first token ("w24fn")
@@ -258,15 +262,18 @@ int validateCommand(char *command)
             return 0;
         }
     }
-    else{
+    else
+    {
         return 0;
     }
     return 1; // Command is valid
 }
 
-int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort) {
+int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
+{
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket < 0) {
+    if (clientSocket < 0)
+    {
         printf("Cannot create client socket\n");
         exit(1);
     }
@@ -274,12 +281,14 @@ int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort) {
     struct sockaddr_in mirrorAddress;
     mirrorAddress.sin_family = AF_INET;
     mirrorAddress.sin_port = htons(mirrorPort);
-    if (inet_pton(AF_INET, mirrorIp, &mirrorAddress.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, mirrorIp, &mirrorAddress.sin_addr) <= 0)
+    {
         printf("Err: Wrong Mirror Address\n");
         exit(1);
     }
 
-    if (connect(clientSocket, (struct sockaddr *)&mirrorAddress, sizeof(mirrorAddress)) < 0) {
+    if (connect(clientSocket, (struct sockaddr *)&mirrorAddress, sizeof(mirrorAddress)) < 0)
+    {
         printf("Err: Cannot conect to mirror.\n");
         exit(1);
     }
@@ -324,19 +333,19 @@ int main(int argc, char *argv[])
     }
     long res = 0;
     recv(sock, &res, sizeof(res), 0);
-    if(res == 1){
+    if (res == 1)
+    {
         printf("Will be redirected to mirror.\n");
         mirrorInfo transferToMirror;
         recv(sock, &transferToMirror, sizeof(mirrorInfo), 0);
         close(sock);
         sock = ConnectToMirrorServer(transferToMirror.ip_address, transferToMirror.port_number);
         printf("Connected to mirror server now!\n");
-    }else {
-          printf("Connected to Server!\n");
     }
-
-
-  
+    else
+    {
+        printf("Connected to Server!\n");
+    }
 
     char message[BUFFER_SIZE];
     while (true)
@@ -384,21 +393,39 @@ int main(int argc, char *argv[])
             receive_file(sock);
             continue;
         }
-        if(strstr(message, "w24fn") != NULL){
-            printf("Receiving file details\n");
-            FileDetails fileDetails;
-            recv(sock, &fileDetails, sizeof(FileDetails), 0);
-            if(fileDetails.path == NULL){
+        if (strstr(message, "w24fn") != NULL)
+        {
+            char fileDetailsString[1500]; // Assuming a maximum size for the string
+            int bytesReceived = recv(sock, &fileDetailsString, sizeof(fileDetailsString), 0);
+            if (bytesReceived < 0)
+            {
+                perror("recv failed");
+                exit(EXIT_FAILURE);
+            }
+            if(bytesReceived == 0){
                 printf("No file found\n");
                 continue;
             }
-            printf("File Path: %s\n", fileDetails.path);
-            printf("File Size: %d\n", fileDetails.size);
-            printf("File Created At: %s\n", fileDetails.createdAtdate);
-            printf("File Permission: %s\n", fileDetails.permission);
+
+            // Null-terminate the received string
+            fileDetailsString[bytesReceived] = '\0';
+
+            // Parse the received string to extract file details
+            char *token = strtok(fileDetailsString, ";");
+            if(strcmp(token, "File not found\n") == 0){
+                printf("File not found\n");
+                continue;
+            }
+            printf("File Path: %s", token);
+            token = strtok(NULL, ";");
+            printf("File Size: %s\n", token);
+            token = strtok(NULL, ";");
+            printf("File Created At: %s\n", token);
+            token = strtok(NULL, ";");
+            printf("File Permission: %s\n", token);
+
             continue;
         }
-
     }
 
     close(sock);
