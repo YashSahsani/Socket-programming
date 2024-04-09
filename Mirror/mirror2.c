@@ -33,9 +33,8 @@ bool isGreaterThanDateOption = false;
 bool isExtensionOption = false;
 char *extension[3];
 char *date = NULL;
-char fileDetailsString[1500];
 
-int countNumberOfConnections = 0;
+int countNumberOfConnections = 1;
 // Function prototypes
 int createTempDirectory();
 int removeTempDirectory();
@@ -45,14 +44,6 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
 int compressFiles(const char *destDir);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
-
-
-
-typedef struct
-{
-    char ip_address[INET_ADDRSTRLEN];
-    int port_number;
-} server_address_info;
 
 // Rest of your code...
 // create a temporary directory
@@ -259,60 +250,6 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
     return 0; // Continue traversal
 }
 
-void getFileDetails(const char *filename)
-{
-    // Find the first occurrence of the file and get its path
-    char find_command[256];
-    snprintf(find_command, sizeof(find_command), "find ~ -name %s | head -n 1", filename);
-
-    FILE *find_fp = popen(find_command, "r");
-    if (find_fp == NULL)
-    {
-        perror("Failed to execute find command");
-        return;
-    }
-
-    char file_path[256];
-    if (fgets(file_path, sizeof(file_path), find_fp) == NULL)
-    {
-        sprintf(fileDetailsString, "%s","File not found\n");
-        printf("File not found\n");
-        pclose(find_fp);
-        return;
-    }
-    pclose(find_fp);
-
-    // Get the file details using ls command
-    char ls_command[256];
-    snprintf(ls_command, sizeof(ls_command), "ls -l --time-style=long-iso %s", file_path);
-
-    FILE *ls_fp = popen(ls_command, "r");
-    if (ls_fp == NULL)
-    {
-        perror("Failed to execute ls command");
-        return;
-    }
-
-    char line[256];
-    if (fgets(line, sizeof(line), ls_fp) != NULL)
-    {
-        char permissions[10], size[20], date_created[20], file_name[256];
-        sscanf(line, "%s %*d %*s %*s %s %s %s %s", permissions, size, date_created, file_name);
-        printf("File path: %s\n", file_path);
-        printf("Permissions: %s\n", permissions);
-        printf("Size: %s\n", size);
-        printf("Date created: %s\n", date_created);
-        sprintf(fileDetailsString, "%s;%s;%s;%s", file_path, size, date_created, permissions);
-    }
-    else
-    {
-        printf("Failed to get file details\n");
-    }
-
-    pclose(ls_fp);
-}
-
-
 int createTarFile()
 {
     // Calculate the total length of the command
@@ -435,7 +372,6 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
-            isSizeOption = false;
             continue;
         }
         else if (strstr(buffer, "w24ft") != NULL)
@@ -472,7 +408,6 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
-            isExtensionOption = false;
             continue;
         }
         else if (strstr(buffer, "w24fdb") != NULL)
@@ -499,7 +434,6 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
-            isLessThanDateOption = false;
             continue;
         }
         else if (strstr(buffer, "w24fda") != NULL)
@@ -521,19 +455,11 @@ void crequest(int client_socket)
             unlink("temp.tar.gz");
             filenames = NULL;
             numFiles = 0;
-            isGreaterThanDateOption = false;
             continue;
         }
-        else if (strstr(buffer, "w24fn") != NULL)
+        else if (strstr(buffer, "quitc") != NULL)
         {
-            char *token = strtok(buffer, " ");
-            token = strtok(NULL, " ");
-            char *getDetailsOffile = token;
-            getFileDetails(getDetailsOffile);
-            send(client_socket, &fileDetailsString, strlen(fileDetailsString), 0);
-            buffer[0] = '\0';
-            fileDetailsString[0] = '\0';
-            continue;
+            break;
         }
 
         // Check for quitc command
@@ -546,48 +472,7 @@ void crequest(int client_socket)
     close(client_socket);
 }
 
-char *redirectToMirror()
-{
-    if (countNumberOfConnections <= 3)
-    {
-        return "Server";
-    }
-    else if (countNumberOfConnections > 3 && countNumberOfConnections <= 6)
-    {
-        return "Mirror1";
-    }
-    else if (countNumberOfConnections > 6 && countNumberOfConnections <= 9)
-    {
-        return "Mirror2";
-    }
-    else
-    {
-        int remiander = countNumberOfConnections % 3;
-        if (remiander == 1)
-        {
-            return "Server";
-        }
-        else if (remiander == 2)
-        {
-            return "Mirror1";
-        }
-        else
-        {
-            return "Mirror2";
-        }
-    }
-}
-void connectClientToMirror(int client_sock, int mirror_port)
-{
-    server_address_info address_info;
-    long redirect = 1;
-    send(client_sock, &redirect, sizeof(redirect), 0);
-    // Send address of mirror and transfer client to that location
-    strcpy(address_info.ip_address, "127.0.0.1");
-    address_info.port_number = mirror_port;
-    send(client_sock, &address_info, sizeof(server_address_info), 0);
-    printf("Client number: %d has been redirected to Mirror%d\n", countNumberOfConnections, mirror_port == MIRROR1_PORT ? 1 : 2);
-}
+
 
 int main()
 {
@@ -612,7 +497,7 @@ int main()
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(MIRROR2_PORT);
 
     // Bind the socket to the specified IP and port
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
@@ -627,42 +512,18 @@ int main()
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
+    
 
-    printf("Server listening on port %d\n", PORT);
+    printf("Server listening on port %d\n", MIRROR2_PORT);
     while (1)
     {
         // Accept incoming connections
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
         {
-
             perror("accept failed");
             exit(EXIT_FAILURE);
         }
-        // Get the client IP address
-
-        char *destination = redirectToMirror();
         countNumberOfConnections++;
-        printf("Connection number: %d\n", countNumberOfConnections);
-        printf("Destination: %s\n", destination);
-        if (strcmp(destination, "Mirror1") == 0)
-        {
-            printf("Redirecting to Mirror1\n");
-            connectClientToMirror(new_socket, MIRROR1_PORT);
-            close(new_socket);
-            continue;
-        }
-        else if (strcmp(destination, "Mirror2") == 0)
-        {
-            printf("Redirecting to Mirror2\n");
-            connectClientToMirror(new_socket, MIRROR2_PORT);
-            close(new_socket);
-            continue;
-        }
-        else
-        {
-            int server = 0;
-            send(new_socket, &server, sizeof(server), 0);
-        }
         // Fork a child process to handle the client request
         if (fork() == 0)
         {
