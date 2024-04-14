@@ -13,8 +13,8 @@
 
 #define PORT 5050
 
-#define MIRROR1_PORT 8081
-#define MIRROR2_PORT 8082
+#define MIRROR1_PORT 5051
+#define MIRROR2_PORT 5052
 #define BUFFER_SIZE 1024
 #define TEMP_DIRECTORY_PREMISSIONS 0700
 #define DEFAULT_UMASK 0022
@@ -38,7 +38,7 @@ char *extension[3];
 char *date = NULL;
 char fileDetailsString[1500];
 
-int countNumberOfConnections = 0;
+int countNumberOfConnections = 1;
 // Function prototypes
 int createTempDirectory();
 int removeTempDirectory();
@@ -597,8 +597,8 @@ void crequest(int client_socket)
             char *getDetailsOffile = token;
             getFileDetails(getDetailsOffile);
             send(client_socket, &fileDetailsString, strlen(fileDetailsString), 0);
-            buffer[0] = '\0';
-            fileDetailsString[0] = '\0';
+            memset(buffer, 0, sizeof(buffer));
+            memset(fileDetailsString, 0, sizeof(fileDetailsString));
             continue;
         }
         else if (strstr(buffer, "dirlist") != NULL)
@@ -731,28 +731,29 @@ int main()
         countNumberOfConnections++;
         printf("Connection number: %d\n", countNumberOfConnections);
         printf("Destination: %s\n", destination);
-        if (strcmp(destination, "Mirror1") == 0)
-        {
-            printf("Redirecting to Mirror1\n");
-            connectClientToMirror(new_socket, MIRROR1_PORT);
-            close(new_socket);
-            continue;
-        }
-        else if (strcmp(destination, "Mirror2") == 0)
-        {
-            printf("Redirecting to Mirror2\n");
-            connectClientToMirror(new_socket, MIRROR2_PORT);
-            close(new_socket);
-            continue;
-        }
-        else
-        {
-            int server = 0;
-            send(new_socket, &server, sizeof(server), 0);
-        }
+
         // Fork a child process to handle the client request
         if (fork() == 0)
         {
+
+            if (strcmp(destination, "Mirror1") == 0)
+            {
+                close(server_fd);
+                printf("Redirecting to Mirror1\n");
+                connectClientToMirror(new_socket, MIRROR1_PORT);
+            }
+            else if (strcmp(destination, "Mirror2") == 0)
+            {
+                close(server_fd);
+                printf("Redirecting to Mirror2\n");
+                connectClientToMirror(new_socket, MIRROR2_PORT);
+            }
+            else
+            {
+                int server = 0;
+                send(new_socket, &server, sizeof(server), 0);
+            }
+
             close(server_fd); // Close the server socket in the child process
             crequest(new_socket);
             exit(0);
