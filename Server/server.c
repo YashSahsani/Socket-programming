@@ -387,7 +387,7 @@ void getFileDetails(const char *filename)
 
     // Get the file details using ls command
     char ls_command[256];
-    snprintf(ls_command, sizeof(ls_command), "stat %s", file_path);
+    snprintf(ls_command, sizeof(ls_command), "stat -c '%%w;%%a/%%A;%%s' %s", file_path);
 
     FILE *ls_fp = popen(ls_command, "r");
     if (ls_fp == NULL)
@@ -395,12 +395,13 @@ void getFileDetails(const char *filename)
         perror("Failed to execute ls command");
         return;
     }
+    printf("line: %s\n", ls_command);
 
     char line[256];
     if (fgets(line, sizeof(line), ls_fp) != NULL)
     {
         char permissions[10], size[20], date_created[20], file_name[256];
-        sscanf(line, "%s %*d %*s %*s %s %s %s %s", permissions, size, date_created, file_name);
+        sscanf(line, "%[^;];%[^;];%s", date_created,permissions,size);
         printf("File path: %s\n", file_path);
         printf("Permissions: %s\n", permissions);
         printf("Size: %s\n", size);
