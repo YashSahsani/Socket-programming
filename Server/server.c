@@ -83,6 +83,14 @@ void createAndWriteTempFile(int count)
     close(fd);
 }
 
+void deleteTempFile()
+{
+    if (remove(tempNumberOfConnectionsFile) != 0)
+    {
+        perror("remove");
+        exit(EXIT_FAILURE);
+    }
+}
 void readTempFile()
 {
     char buffer[20]; // Increased buffer size to handle larger numbers
@@ -266,7 +274,6 @@ void fetchDirNamesFromTime(int socketId)
     // Close the file pointer
     pclose(fp);
 
-    // Send the completion signal
     if (send(socketId, "COMPLETED_", strlen("COMPLETED_"), 0) == -1)
     {
         perror("send");
@@ -311,7 +318,6 @@ void fetchDirNamesFromPath(int socketId)
     // Close the file pointer
     pclose(fp);
 
-    // Send the completion signal
     if (send(socketId, "COMPLETED_", strlen("COMPLETED_"), 0) == -1)
     {
         perror("send");
@@ -401,7 +407,7 @@ void getFileDetails(const char *filename)
     if (fgets(line, sizeof(line), ls_fp) != NULL)
     {
         char permissions[10], size[20], date_created[20], file_name[256];
-        sscanf(line, "%[^;];%[^;];%s", date_created,permissions,size);
+        sscanf(line, "%[^;];%[^;];%s", date_created, permissions, size);
         printf("File path: %s\n", file_path);
         printf("Permissions: %s\n", permissions);
         printf("Size: %s\n", size);
@@ -730,12 +736,20 @@ void connectClientToMirror(int client_sock, int mirror_port)
     printf("Client number: %d has been redirected to Mirror %d\n", (countNumberOfConnections - 1), mirror_port == MIRROR1_PORT ? 1 : 2);
 }
 
+void sigintHandler(int sig_num)
+{
+
+    deleteTempFile();
+    exit(0);
+}
+
 int main()
 {
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
+    signal(SIGINT, sigintHandler);
 
     // Create socket file descriptor
     createAndWriteTempFile(1);
