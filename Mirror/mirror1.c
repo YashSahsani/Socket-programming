@@ -13,8 +13,8 @@
 
 #define PORT 5050
 
-#define MIRROR1_PORT 8081
-#define MIRROR2_PORT 8082
+#define MIRROR1_PORT 5051
+#define MIRROR2_PORT 5052
 #define BUFFER_SIZE 1024
 #define TEMP_DIRECTORY_PREMISSIONS 0700
 #define DEFAULT_UMASK 0022
@@ -524,7 +524,7 @@ int main()
             perror("accept failed");
             exit(EXIT_FAILURE);
         }
-        countNumberOfConnections++;
+        printf("Connection accepted\n");
         // Fork a child process to handle the client request
         if (fork() == 0)
         {
