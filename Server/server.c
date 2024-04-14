@@ -27,6 +27,9 @@ char **filenames = NULL;
 int sizeGreaterThan = 0;
 char *TempCopyDestination = "/var/tmp/testZip110128863";
 int numFiles = 0;
+bool isDirListOption = false;
+bool isDirListAlpha = false;
+bool isDirListTime = false;
 bool isSizeOption = false;
 bool isLessThanDateOption = false;
 bool isGreaterThanDateOption = false;
@@ -42,11 +45,11 @@ int removeTempDirectory();
 int saveFileNamesInArray(const char *fpath);
 int copyFile(const char *srcPath, const char *destPath);
 static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf);
+void fetchDirNamesFromPath(int socketId);
+void fetchDirNamesFromTime(int socketId);
 int compressFiles(const char *destDir);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
-
-
 
 typedef struct
 {
@@ -174,6 +177,11 @@ int copyFile(const char *srcPath, const char *destPath)
     return EXIT_SUCCESS;
 }
 
+// Comparison function for qsort
+int compare(const void *a, const void *b) {
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
 int checkDate(char *givenDate, char *fileDate)
 {
     const char *dateFormat = "%Y-%m-%d";
@@ -215,6 +223,64 @@ bool isFileExtensionInExtensions(const char *fpath)
     }
     return false;
 }
+
+void fetchDirNamesFromTime(int socketId) {
+    FILE *fp;
+    char path[1035];
+    char command[256];
+    char *home_directory = getenv("HOME");
+
+    // Construct the ls command to list directories under the home directory sorted by modification time
+    sprintf(command, "ls -t -d %s/*/", home_directory);
+
+    // Open the command for reading
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        perror("popen");
+        exit(EXIT_FAILURE);
+    }
+
+    // Read the output of the command and send directory names to the client
+    while (fgets(path, sizeof(path), fp) != NULL) {
+        // Remove the trailing newline character
+        path[strcspn(path, "\n")] = '\0';
+        send(socketId, path, strlen(path), 0);
+        send(socketId, "\n", 1, 0); // Add newline character
+    }
+
+    // Close the file pointer
+    pclose(fp);
+}
+
+void fetchDirNamesFromPath(int socketId) {
+    FILE *fp;
+    char path[1035];
+    char command[256];
+    char *home_directory = getenv("HOME");
+
+    // Construct the find command to list directories under the home directory
+    sprintf(command, "find %s -mindepth 1 -maxdepth 1 -type d ! -name '.*' -exec basename {} \\; | sort", home_directory);
+
+    // Open the command for reading
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        perror("popen");
+        exit(EXIT_FAILURE);
+    }
+
+    // Read the output of the command and send it to the client
+    while (fgets(path, sizeof(path), fp) != NULL) {
+         // Remove the trailing newline character
+        path[strcspn(path, "\n")] = '\0';
+        send(socketId, path, strlen(path), 0);
+        send(socketId, "\n", 1, 0); // Add newline character
+    }
+
+    // Close the file pointer
+    pclose(fp);
+    
+}
+
 static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
@@ -533,6 +599,27 @@ void crequest(int client_socket)
             send(client_socket, &fileDetailsString, strlen(fileDetailsString), 0);
             buffer[0] = '\0';
             fileDetailsString[0] = '\0';
+            continue;
+        }
+        else if (strstr(buffer, "dirlist") != NULL)
+        {
+            isDirListOption = true;
+            char *token = strtok(buffer, " ");
+            token = strtok(NULL, " ");
+            char *dirOperation = token;
+            if (strcmp(dirOperation, "-a") == 0)
+            {
+                fetchDirNamesFromPath(client_socket);                
+            }
+            else if (strcmp(dirOperation, "-t") == 0)
+            {
+                fetchDirNamesFromTime(client_socket);
+            }
+            else
+            {
+                printf("Invalid option: %s\n", dirOperation);
+                close(client_socket);
+            }
             continue;
         }
 

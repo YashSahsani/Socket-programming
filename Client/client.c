@@ -261,6 +261,28 @@ int validateCommand(char *command)
             printf("Invalid command format.\n");
             return 0;
         }
+    } else if (strncmp(command, "dirlist -a", 10) == 0) {
+        char *extra;
+        char *token = strtok(command, " ");
+        token = strtok(NULL, " "); // Skip the first token ("dirlist")
+        token = strtok(NULL, " "); // Skip the second token ("-a")
+        extra = token;
+        if (extra != NULL)
+        {
+            printf("Invalid command format.\n");
+            return 0;
+        }
+    } else if(strncmp(command, "dirlist -t", 10) == 0){
+        char *extra;
+        char *token = strtok(command, " ");
+        token = strtok(NULL, " "); // Skip the first token ("dirlist")
+        token = strtok(NULL, " "); // Skip the second token ("-t")
+        extra = token;
+        if (extra != NULL)
+        {
+            printf("Invalid command format.\n");
+            return 0;
+        }
     }
     else
     {
@@ -298,6 +320,7 @@ int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
 
 int main(int argc, char *argv[])
 {
+    char buffer[BUFFER_SIZE] = {0};
     if (argc != 3)
     {
         printf("Usage: %s <server IP address> <server port>\n", argv[0]);
@@ -424,6 +447,36 @@ int main(int argc, char *argv[])
             token = strtok(NULL, ";");
             printf("File Permission: %s\n", token);
 
+            continue;
+        }
+        if(strstr(message, "dirlist -a") != NULL){
+            int valread;
+            // Receiving directory list from server
+            while ((valread = read(sock, buffer, BUFFER_SIZE - 1)) > 0) {
+                buffer[valread] = '\0'; // Null-terminate the received data
+                printf("%s", buffer);
+            }
+
+            if (valread < 0) {
+                printf("Failed to receive directory list from server\n");
+            } else if(valread == 0) {
+                continue;
+            }
+            continue;
+        }
+        if(strstr(message, "dirlist -t") != NULL){
+            int valread;
+            // Receiving directory list from server
+            while ((valread = read(sock, buffer, BUFFER_SIZE - 1)) > 0) {
+                buffer[valread] = '\0'; // Null-terminate the received data
+                printf("%s", buffer);
+            }
+
+            if (valread < 0) {
+                printf("Failed to receive directory list from server\n");
+            } else if(valread == 0) {
+                continue;
+            }
             continue;
         }
     }
