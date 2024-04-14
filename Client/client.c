@@ -8,11 +8,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
 
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
+#define BUFFER_SIZE_FOR_TEXT_RESPONSE 11
 
-
+int sock;
 typedef struct
 {
     char ip_address[MAX_IP_LENGTH];
@@ -284,6 +286,17 @@ int validateCommand(char *command)
             return 0;
         }
     }
+    else if(strncmp(command, "quitc", 5) == 0){
+        char *extra;
+        char *token = strtok(command, " ");
+        token = strtok(NULL, " "); 
+        extra = token;
+        if (extra != NULL)
+        {
+            printf("Invalid command format.\n");
+            return 0;
+        }
+    }
     else
     {
         return 0;
@@ -318,6 +331,13 @@ int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
     return clientSocket;
 }
 
+void signalHandler(int signal)
+{
+   if(signal == SIGINT){
+       send(sock, "quitc", strlen("quitc"), 0);
+       exit(0);
+   }
+}
 int main(int argc, char *argv[])
 {
     char buffer[BUFFER_SIZE] = {0};
@@ -337,7 +357,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1)
     {
         perror("Failed to create socket");
@@ -354,6 +374,7 @@ int main(int argc, char *argv[])
         perror("Failed to connect to server");
         exit(EXIT_FAILURE);
     }
+    signal(SIGINT, signalHandler);
     long res = 0;
     recv(sock, &res, sizeof(res), 0);
     if (res == 1)
@@ -449,35 +470,69 @@ int main(int argc, char *argv[])
 
             continue;
         }
-        if(strstr(message, "dirlist -a") != NULL){
-            int valread;
-            // Receiving directory list from server
-            while ((valread = read(sock, buffer, BUFFER_SIZE - 1)) > 0) {
-                buffer[valread] = '\0'; // Null-terminate the received data
+        if (strstr(message, "dirlist -a") != NULL)
+        {
+            char buffer[BUFFER_SIZE];
+            int bytesReceived;
+
+            // Receive data until "COMPLETED_" is received
+            while (1)
+            {
+                bytesReceived = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+                if (bytesReceived < 0)
+                {
+                    perror("recv");
+                    break;
+                }
+                else if (bytesReceived == 0)
+                {
+                    printf("Server closed connection\n");
+                    break;
+                }
+
+                buffer[bytesReceived] = '\0'; // Null-terminate the received data
+
+                // Check if "COMPLETED_" is received
+                if (strcmp(buffer, "COMPLETED_") == 0)
+                {
+                    break;
+                }
+
                 printf("%s", buffer);
             }
-
-            if (valread < 0) {
-                printf("Failed to receive directory list from server\n");
-            } else if(valread == 0) {
-                continue;
-            }
-            continue;
         }
         if(strstr(message, "dirlist -t") != NULL){
-            int valread;
-            // Receiving directory list from server
-            while ((valread = read(sock, buffer, BUFFER_SIZE - 1)) > 0) {
-                buffer[valread] = '\0'; // Null-terminate the received data
+           char buffer[BUFFER_SIZE];
+            int bytesReceived;
+
+            // Receive data until "COMPLETED_" is received
+            while (1)
+            {
+                bytesReceived = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+                if (bytesReceived < 0)
+                {
+                    perror("recv");
+                    break;
+                }
+                else if (bytesReceived == 0)
+                {
+                    printf("Server closed connection\n");
+                    break;
+                }
+
+                buffer[bytesReceived] = '\0'; // Null-terminate the received data
+
+                // Check if "COMPLETED_" is received
+                if (strcmp(buffer, "COMPLETED_") == 0)
+                {
+                    break;
+                }
+
                 printf("%s", buffer);
             }
-
-            if (valread < 0) {
-                printf("Failed to receive directory list from server\n");
-            } else if(valread == 0) {
-                continue;
-            }
-            continue;
+        }
+        if(strstr(message, "quitc") != NULL){
+            break;
         }
     }
 
