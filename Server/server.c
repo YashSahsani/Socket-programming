@@ -469,14 +469,21 @@ int createTarFile()
     }
 
     // Initialize the command string
-    strcpy(command, "tar -czf ./temp.tar.gz ");
-
+    
+    strcpy(command, "tar -czf ./temp.tar.gz --files-from=/var/tmp/110128863zipFileList");
+    int fd = open("/var/tmp/110128863zipFileList", O_CREAT | O_RDWR, 0666);
+    if (fd == -1)
+    {
+        perror("open");
+        exit(EXIT_FAILURE);
+    }
     // Loop through the filenames and append them to the command
     for (int i = 0; i < numFiles; i++)
     {
-        strcat(command, filenames[i]);
-        strcat(command, " ");
+       write(fd, filenames[i], strlen(filenames[i]));
+       write(fd, "\n", 1);
     }
+    close(fd);
     printf("Command: %s\n", command);
 
     pid_t pid = fork();
@@ -512,6 +519,7 @@ int createTarFile()
 
     // Free the allocated memory
     free(command);
+    unlink("/var/tmp/110128863zipFileList");
     return EXIT_SUCCESS;
 }
 
@@ -620,6 +628,10 @@ void crequest(int client_socket)
             filenames = NULL;
             numFiles = 0;
             isExtensionOption = false;
+            for(int i = 0; i < 3; i++)
+            {
+               extension[i] = NULL;
+            }
             memset(buffer, 0, sizeof(buffer));
             continue;
         }
