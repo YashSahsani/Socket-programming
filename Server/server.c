@@ -24,6 +24,7 @@
 #define DEFAULT_UMASK 0022
 #define NEW_UMASK 0000
 #define DEFAULT_PERMISSIONS_FILE 0666
+#define IP_ADDRESS_SIZE 16
 
 int sizeLessThan = 0;
 bool zipOption = false;
@@ -50,10 +51,9 @@ void createAndWriteTempFile(int count);
 void readTempFile();
 int saveFileNamesInArray(const char *fpath);
 int copyFile(const char *srcPath, const char *destPath);
-static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf);
+static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf);
 void fetchDirNamesFromPath(int socketId);
 void fetchDirNamesFromTime(int socketId);
-int compressFiles(const char *destDir);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
 
@@ -236,26 +236,45 @@ bool isFileExtensionInExtensions(const char *fpath)
     return false;
 }
 
+char* constructFindCommand(const char* home_directory)
+{
+    char* command = malloc(strlen(home_directory) + 256);
+    if (!command)
+    {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+
+    snprintf(command, strlen(home_directory) + 256, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*' -printf '%%T@ %%p\\n' | sort -n | cut -d' ' -f2- | xargs -I{} stat -c '%%w %%n' '{}' | sort -n | cut -d' ' -f4-", home_directory);
+
+    return command;
+}
+
 void fetchDirNamesFromTime(int socketId)
 {
     FILE *fp;
-    char path[1035];
-    char command[256];
+    char path[BUFFER_SIZE];
     char *home_directory = getenv("HOME");
 
-    // Construct the find command to list directories under the home directory
-    sprintf(command, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*' -printf '%%T@ %%p\n' | sort -n | cut -d' ' -f2- | xargs -I{} stat -c '%%w %%n' '{}' | sort -n | cut -d' ' -f4-", home_directory);
+    if (!home_directory)
+    {
+        perror("getenv");
+        exit(EXIT_FAILURE);
+    }
+
+    char *command = constructFindCommand(home_directory);
 
     // Open the command for reading
     fp = popen(command, "r");
     if (fp == NULL)
     {
         perror("popen");
-        exit(EXIT_FAILURE);
+        free(command);
+        return;
     }
 
     // Read the output of the command and send it to the client
-    while (fgets(path, sizeof(path), fp) != NULL)
+    while (fgets(path, BUFFER_SIZE, fp) != NULL)
     {
         // Remove the trailing newline character
         path[strcspn(path, "\n")] = '\0';
@@ -273,6 +292,7 @@ void fetchDirNamesFromTime(int socketId)
 
     // Close the file pointer
     pclose(fp);
+    free(command);
 
     if (send(socketId, "COMPLETED_", strlen("COMPLETED_"), 0) == -1)
     {
@@ -351,7 +371,7 @@ char* getCreatedAtDate(const char *fpath)
     return date_created;
 }
 
-static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
+static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
     {
@@ -577,7 +597,7 @@ void crequest(int client_socket)
             sizeLessThan = atoi(token);
 
             // Traverse the home directory and display the file paths
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
@@ -615,7 +635,7 @@ void crequest(int client_socket)
                 i++;
             }
 
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
@@ -644,13 +664,12 @@ void crequest(int client_socket)
             date = token;
             isLessThanDateOption = true;
 
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
             }
             createTarFile();
-            printf("---->Tar file created\n");
 
             sendTarFileToClient(client_socket);
             // Remove the temporary directory
@@ -667,7 +686,7 @@ void crequest(int client_socket)
             token = strtok(NULL, " ");
             date = token;
             isGreaterThanDateOption = true;
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
@@ -757,16 +776,28 @@ char *redirectToMirror()
         }
     }
 }
-void connectClientToMirror(int client_sock, int mirror_port)
+
+void sendRedirectMessage(int client_sock)
 {
-    server_address_info address_info;
     long redirect = 1;
     send(client_sock, &redirect, sizeof(redirect), 0);
-    // Send address of mirror and transfer client to that location
-    strcpy(address_info.ip_address, "127.0.0.1");
+}
+
+void sendMirrorAddress(int client_sock, int mirror_port)
+{
+    server_address_info address_info;
+    snprintf(address_info.ip_address, IP_ADDRESS_SIZE, "127.0.0.1");
     address_info.port_number = mirror_port;
     send(client_sock, &address_info, sizeof(server_address_info), 0);
-    printf("Client number: %d has been redirected to Mirror %d\n", (countNumberOfConnections - 1), mirror_port == MIRROR1_PORT ? 1 : 2);
+}
+
+void connectClientToMirror(int client_sock, int mirror_port)
+{
+    sendRedirectMessage(client_sock);
+    sendMirrorAddress(client_sock, mirror_port);
+
+    int mirror_number = (mirror_port == MIRROR1_PORT) ? 1 : 2;
+    printf("Client number %d has been redirected to Mirror %d\n", (countNumberOfConnections - 1), mirror_number);
 }
 
 void sigintHandler(int sig_num)

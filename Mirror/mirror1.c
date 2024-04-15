@@ -50,7 +50,7 @@ void createAndWriteTempFile(int count);
 void readTempFile();
 int saveFileNamesInArray(const char *fpath);
 int copyFile(const char *srcPath, const char *destPath);
-static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf);
+static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf);
 void fetchDirNamesFromPath(int socketId);
 void fetchDirNamesFromTime(int socketId);
 int compressFiles(const char *destDir);
@@ -318,7 +318,7 @@ void fetchDirNamesFromPath(int socketId)
     }
 }
 
-static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
+static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
     {
@@ -548,7 +548,7 @@ void crequest(int client_socket)
             sizeLessThan = atoi(token);
 
             // Traverse the home directory and display the file paths
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
@@ -586,7 +586,7 @@ void crequest(int client_socket)
                 i++;
             }
 
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
@@ -615,7 +615,7 @@ void crequest(int client_socket)
             date = token;
             isLessThanDateOption = true;
 
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
@@ -638,7 +638,7 @@ void crequest(int client_socket)
             token = strtok(NULL, " ");
             date = token;
             isGreaterThanDateOption = true;
-            if (nftw(homePath, display_info, 20, FTW_PHYS) == -1)
+            if (nftw(homePath, nftwGetFileInfo, 20, FTW_PHYS) == -1)
             {
                 perror("nftw");
                 exit(EXIT_FAILURE);
