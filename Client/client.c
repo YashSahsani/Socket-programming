@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <signal.h>
+#include <dirent.h>
 
 #define MAX_IP_LENGTH 16
 #define BUFFER_SIZE 1024
@@ -23,7 +24,7 @@ typedef struct
 
 void receive_file(int server_socket)
 {
-    char filename[] = "temp.tar.gz";
+    char filename[] = "w24project/temp.tar.gz";
     FILE *file = fopen(filename, "wb");
     if (!file)
     {
@@ -331,6 +332,22 @@ int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
     return clientSocket;
 }
 
+void createDirectoryIfNotExists(const char *dirName) {
+    DIR *dir = opendir(dirName);
+    if (dir) {
+        // Directory exists
+        closedir(dir);
+    } else {
+        // Directory does not exist, create it
+        if (mkdir(dirName, 0777) == -1) {
+            printf("Failed to create directory %s\n", dirName);
+            exit(EXIT_FAILURE);
+        }
+        printf("Directory %s created successfully.\n", dirName);
+    }
+}
+
+
 void signalHandler(int signal)
 {
    if(signal == SIGINT){
@@ -394,6 +411,7 @@ int main(int argc, char *argv[])
     char message[BUFFER_SIZE];
     while (true)
     {
+        createDirectoryIfNotExists("w24project");
         fflush(stdout);
         printf("Enter message to send: ");
         fgets(message, BUFFER_SIZE, stdin);
