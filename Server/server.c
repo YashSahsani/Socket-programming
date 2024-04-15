@@ -245,8 +245,7 @@ char* constructFindCommand(const char* home_directory)
         exit(EXIT_FAILURE);
     }
 
-    snprintf(command, strlen(home_directory) + 256, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*' -printf '%%T@ %%p\\n' | sort -n | cut -d' ' -f2- | xargs -I{} stat -c '%%w %%n' '{}' | sort -n | cut -d' ' -f4-", home_directory);
-
+    snprintf(command, strlen(home_directory) + 256, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*' -printf '%%T@ %%p\\n' | sort -n | cut -d' ' -f2- | xargs -I{} stat -c '%%w %%n' '{}' | sort -n | cut -d' ' -f4- | sed 's|%s/||'", home_directory,home_directory);
     return command;
 }
 
@@ -308,7 +307,7 @@ void fetchDirNamesFromPath(int socketId)
     char *home_directory = getenv("HOME");
 
     // Construct the find command to list directories under the home directory
-    sprintf(command, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*'  | sort -f", home_directory);
+    sprintf(command, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*'  | sort -f | sed 's|%s/||'", home_directory,home_directory);
 
     // Open the command for reading
     fp = popen(command, "r");
