@@ -15,17 +15,20 @@
 #define BUFFER_SIZE 1024
 #define BUFFER_SIZE_FOR_TEXT_RESPONSE 11
 
-int sock;
+int sock; // Socket file descriptor
+
+// Structure to hold mirror information
 typedef struct
 {
     char ip_address[MAX_IP_LENGTH];
     int port_number;
 } mirrorInfo;
 
+// Function to receive a file from the server
 void receive_file(int server_socket)
 {
-    char filename[] = "w24project/temp.tar.gz";
-    FILE *file = fopen(filename, "wb");
+    char filename[] = "w24project/temp.tar.gz"; // Destination file name
+    FILE *file = fopen(filename, "wb"); // Open file in write binary mode
     if (!file)
     {
         perror("Error opening file");
@@ -33,7 +36,7 @@ void receive_file(int server_socket)
     }
 
     long file_size;
-    recv(server_socket, &file_size, sizeof(file_size), 0);
+    recv(server_socket, &file_size, sizeof(file_size), 0); // Receive file size from server
     printf("File size: %d\n", file_size);
     if (file_size == 0)
     {
@@ -43,16 +46,20 @@ void receive_file(int server_socket)
 
     char buffer[BUFFER_SIZE];
     size_t total_bytes_received = 0;
+
+    // Receive file data in chunks until total file size is received
     while (total_bytes_received < file_size)
     {
-        size_t bytes_received = recv(server_socket, buffer, sizeof(buffer), 0);
-        fwrite(buffer, 1, bytes_received, file);
+        size_t bytes_received = recv(server_socket, buffer, sizeof(buffer), 0);  // Receive data
+        fwrite(buffer, 1, bytes_received, file); // Write received data to file
         total_bytes_received += bytes_received;
     }
 
-    fclose(file);
+    fclose(file); // Close file
 }
 
+
+// Function to check if a date string is in valid format
 bool isValidDate(char *dateStr)
 {
     int year, month, day;
@@ -91,6 +98,8 @@ bool isValidDate(char *dateStr)
 
     return true;
 }
+
+// Function to check if a date is in the future
 int isFutureDate(char *givenDate)
 {
     const char *dateFormat = "%Y-%m-%d";
@@ -115,6 +124,7 @@ int isFutureDate(char *givenDate)
     }
 }
 
+// Function to validate a command received from the user
 int validateCommand(char *command)
 {
     // Check if the command starts with "w24ft"
@@ -303,6 +313,7 @@ int validateCommand(char *command)
     return 1; // Command is valid
 }
 
+// Function to connect to a mirror server
 int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
 {
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -330,6 +341,7 @@ int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
     return clientSocket;
 }
 
+// Function to create a directory if it does not exist
 void createDirectoryIfNotExists(const char *dirName) {
     DIR *dir = opendir(dirName);
     if (dir) {
@@ -345,7 +357,7 @@ void createDirectoryIfNotExists(const char *dirName) {
     }
 }
 
-
+// Signal handler function to handle SIGINT signal (Ctrl+C)
 void signalHandler(int signal)
 {
    if(signal == SIGINT){
@@ -353,15 +365,20 @@ void signalHandler(int signal)
        exit(0);
    }
 }
+
 int main(int argc, char *argv[])
 {
+
     char buffer[BUFFER_SIZE] = {0};
+
+    // Command line arguments validation
     if (argc != 3)
     {
         printf("Usage: %s <server IP address> <server port>\n", argv[0]);
         return 1;
     }
 
+// Socket creation and connection to server
     char *serverIP = argv[1];
     int serverPort = atoi(argv[2]);
 
@@ -389,7 +406,11 @@ int main(int argc, char *argv[])
         perror("Failed to connect to server");
         exit(EXIT_FAILURE);
     }
+
+    // Signal handler registration for SIGINT (Ctrl+C)
     signal(SIGINT, signalHandler);
+
+    // Receiving redirection information from server
     long res = 0;
     recv(sock, &res, sizeof(res), 0);
     if (res == 1)
@@ -407,15 +428,19 @@ int main(int argc, char *argv[])
     }
 
     char message[BUFFER_SIZE];
+    // Main loop to interact with server
     while (true)
     {
+        // Creating directory if not exists
         createDirectoryIfNotExists("w24project");
         fflush(stdout);
         printf("Enter message to send: ");
-        fgets(message, BUFFER_SIZE, stdin);
+        fgets(message, BUFFER_SIZE, stdin); // Getting user input message
+
         // Remove newline character from the message
         message[strcspn(message, "\n")] = 0;
 
+        // Validating user command
         char *CommandCopy = strdup(message);
         if (!validateCommand(CommandCopy))
         {
@@ -423,12 +448,14 @@ int main(int argc, char *argv[])
             continue;
         }
         printf("Command: %s \n", message);
+        // Sending user command to server
         if (send(sock, message, strlen(message), 0) < 0)
         {
             perror("Failed to send message");
             exit(EXIT_FAILURE);
         }
 
+        // Handling specific commands: file transfer, directory listing, etc.
         if (strstr(message, "w24fz") != NULL)
         {
 
@@ -552,6 +579,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    close(sock);
+    close(sock); // Closing socket and exiting program
     return 0;
 }

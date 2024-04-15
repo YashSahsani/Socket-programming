@@ -26,6 +26,7 @@
 #define DEFAULT_PERMISSIONS_FILE 0666
 #define IP_ADDRESS_SIZE 16
 
+// Global variables
 int sizeLessThan = 0;
 bool zipOption = false;
 char **filenames = NULL;
@@ -57,12 +58,14 @@ void fetchDirNamesFromTime(int socketId);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
 
+// // Structure to store the server address information
 typedef struct
 {
     char ip_address[INET_ADDRSTRLEN];
     int port_number;
 } server_address_info;
 
+// Function to create a temporary file and write the number of connections to it
 void createAndWriteTempFile(int count)
 {
     int fd = open(tempNumberOfConnectionsFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -83,6 +86,7 @@ void createAndWriteTempFile(int count)
     close(fd);
 }
 
+// Function to delete the temporary file
 void deleteTempFile()
 {
     if (remove(tempNumberOfConnectionsFile) != 0)
@@ -91,6 +95,8 @@ void deleteTempFile()
         exit(EXIT_FAILURE);
     }
 }
+
+// Function to read the number of connections from the temporary file
 void readTempFile()
 {
     char buffer[20]; // Increased buffer size to handle larger numbers
@@ -111,6 +117,7 @@ void readTempFile()
     close(fd);
 }
 
+// Function to save the filenames in an array
 int saveFileNamesInArray(const char *fpath)
 {
     // Reallocate memory for the filenames array
@@ -134,6 +141,8 @@ int saveFileNamesInArray(const char *fpath)
     numFiles++;
     return EXIT_SUCCESS;
 }
+
+// Function to copy a file from the source path to the destination path
 int copyFile(const char *srcPath, const char *destPath)
 {
     // Set the umask to 0000
@@ -196,6 +205,7 @@ int compare(const void *a, const void *b)
     return strcmp(*(const char **)a, *(const char **)b);
 }
 
+// Function to check the date format
 int checkDate(char *givenDate, char *fileDate)
 {
     const char *dateFormat = "%Y-%m-%d";
@@ -216,6 +226,8 @@ int checkDate(char *givenDate, char *fileDate)
 
     return daysDifference;
 }
+
+// Function to check if the file extension is in the list of extensions
 bool isFileExtensionInExtensions(const char *fpath)
 {
 
@@ -236,6 +248,7 @@ bool isFileExtensionInExtensions(const char *fpath)
     return false;
 }
 
+// Function to construct the find command to list directories under the home directory
 char* constructFindCommand(const char* home_directory)
 {
     char* command = malloc(strlen(home_directory) + 256);
@@ -249,6 +262,7 @@ char* constructFindCommand(const char* home_directory)
     return command;
 }
 
+// Function to fetch the directory names from the home directory by time
 void fetchDirNamesFromTime(int socketId)
 {
     FILE *fp;
@@ -299,6 +313,7 @@ void fetchDirNamesFromTime(int socketId)
     }
 }
 
+//  Function to fetch the directory names from the home directory
 void fetchDirNamesFromPath(int socketId)
 {
     FILE *fp;
@@ -343,6 +358,7 @@ void fetchDirNamesFromPath(int socketId)
     }
 }
 
+// Function to get the creation date of a file
 char* getCreatedAtDate(const char *fpath)
 {
     char stat_command[500];
@@ -370,10 +386,12 @@ char* getCreatedAtDate(const char *fpath)
     return date_created;
 }
 
+// Function to get the file details which will traverse all over the directories
 static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
     {
+        // Check if the file meets the specified criteria
         if (isSizeOption && sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
 
@@ -408,6 +426,7 @@ static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, 
     return 0; // Continue traversal
 }
 
+// Function to get the file details
 void getFileDetails(const char *filename)
 {
     // Find the first occurrence of the file and get its path
@@ -462,6 +481,7 @@ void getFileDetails(const char *filename)
     pclose(ls_fp);
 }
 
+// Function to create a tar file
 int createTarFile()
 {
     // Calculate the total length of the command
@@ -542,6 +562,7 @@ int createTarFile()
     return EXIT_SUCCESS;
 }
 
+// Function to send the tar file to the client
 void sendTarFileToClient(int client_socket)
 {
     printf("Sending tar file to client\n");
@@ -571,6 +592,7 @@ void sendTarFileToClient(int client_socket)
     fclose(file);
 }
 
+// Function to handle the client request
 void crequest(int client_socket)
 {
     char buffer[BUFFER_SIZE] = {0};
@@ -744,6 +766,7 @@ void crequest(int client_socket)
     close(client_socket);
 }
 
+// Function to redirect the client to the mirror server
 char *redirectToMirror()
 {
     if (countNumberOfConnections <= 3)
@@ -776,12 +799,14 @@ char *redirectToMirror()
     }
 }
 
+// Function to send a message to the client to redirect to the mirror server
 void sendRedirectMessage(int client_sock)
 {
     long redirect = 1;
     send(client_sock, &redirect, sizeof(redirect), 0);
 }
 
+// Function to send the mirror server address to the client
 void sendMirrorAddress(int client_sock, int mirror_port)
 {
     server_address_info address_info;
@@ -790,6 +815,7 @@ void sendMirrorAddress(int client_sock, int mirror_port)
     send(client_sock, &address_info, sizeof(server_address_info), 0);
 }
 
+// Function to connect the client to the mirror server
 void connectClientToMirror(int client_sock, int mirror_port)
 {
     sendRedirectMessage(client_sock);
@@ -799,9 +825,10 @@ void connectClientToMirror(int client_sock, int mirror_port)
     printf("Client number %d has been redirected to Mirror %d\n", (countNumberOfConnections - 1), mirror_number);
 }
 
+// Signal handler for SIGINT
 void sigintHandler(int sig_num)
 {
-
+    // Delete the temporary file
     deleteTempFile();
     exit(0);
 }

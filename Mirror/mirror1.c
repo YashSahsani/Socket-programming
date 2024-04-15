@@ -25,6 +25,7 @@
 #define NEW_UMASK 0000
 #define DEFAULT_PERMISSIONS_FILE 0666
 
+//Global variables
 int sizeLessThan = 0;
 bool zipOption = false;
 char **filenames = NULL;
@@ -57,6 +58,7 @@ int compressFiles(const char *destDir);
 void sendTarFileToClient(int client_socket);
 void crequest(int client_socket);
 
+// Structure to store the server address information
 typedef struct
 {
     char ip_address[INET_ADDRSTRLEN];
@@ -83,6 +85,7 @@ void createAndWriteTempFile(int count)
     close(fd);
 }
 
+// Read the number of connections from the temp file
 void readTempFile()
 {
     char buffer[20]; // Increased buffer size to handle larger numbers
@@ -103,6 +106,7 @@ void readTempFile()
     close(fd);
 }
 
+// Save the filenames in an array
 int saveFileNamesInArray(const char *fpath)
 {
     // Reallocate memory for the filenames array
@@ -126,6 +130,8 @@ int saveFileNamesInArray(const char *fpath)
     numFiles++;
     return EXIT_SUCCESS;
 }
+
+// Copy the contents of the source file to the destination file
 int copyFile(const char *srcPath, const char *destPath)
 {
     // Set the umask to 0000
@@ -188,6 +194,7 @@ int compare(const void *a, const void *b)
     return strcmp(*(const char **)a, *(const char **)b);
 }
 
+// Validating the date format
 int checkDate(char *givenDate, char *fileDate)
 {
     const char *dateFormat = "%Y-%m-%d";
@@ -208,6 +215,8 @@ int checkDate(char *givenDate, char *fileDate)
 
     return daysDifference;
 }
+
+// Check if the file extension is in the list of extensions
 bool isFileExtensionInExtensions(const char *fpath)
 {
 
@@ -228,6 +237,7 @@ bool isFileExtensionInExtensions(const char *fpath)
     return false;
 }
 
+// Fetch the directory names from the home directory base on time
 void fetchDirNamesFromTime(int socketId)
 {
     FILE *fp;
@@ -273,6 +283,7 @@ void fetchDirNamesFromTime(int socketId)
     }
 }
 
+// Fetch the directory names from the home directory base on alphabetical order
 void fetchDirNamesFromPath(int socketId)
 {
     FILE *fp;
@@ -318,10 +329,12 @@ void fetchDirNamesFromPath(int socketId)
     }
 }
 
+// Traverse the home directory and display the file paths
 static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
     {
+        // Check if the file meets the specified criteria
         if (isSizeOption && sb->st_size >= sizeGreaterThan && sb->st_size <= sizeLessThan)
         {
 
@@ -362,6 +375,7 @@ static int nftwGetFileInfo(const char *fpath, const struct stat *sb, int tflag, 
     return 0; // Continue traversal
 }
 
+// Compress the files in the specified directory
 void getFileDetails(const char *filename)
 {
     // Find the first occurrence of the file and get its path
@@ -415,6 +429,7 @@ void getFileDetails(const char *filename)
     pclose(ls_fp);
 }
 
+// Compress the files in the specified directory
 int createTarFile()
 {
     // Calculate the total length of the command
@@ -494,6 +509,7 @@ int createTarFile()
     return EXIT_SUCCESS;
 }
 
+//Sending the tar files to the client
 void sendTarFileToClient(int client_socket)
 {
     printf("Sending tar file to client\n");
@@ -523,6 +539,7 @@ void sendTarFileToClient(int client_socket)
     fclose(file);
 }
 
+// Handle the client request
 void crequest(int client_socket)
 {
     char buffer[BUFFER_SIZE] = {0};
@@ -559,7 +576,7 @@ void crequest(int client_socket)
             sendTarFileToClient(client_socket);
             // Remove the temporary directory
             unlink("temp.tar.gz");
-            memset(buffer, 0, sizeof(buffer));
+            memset(buffer, 0, sizeof(buffer)); // Clear the buffer
             filenames = NULL;
             numFiles = 0;
             isSizeOption = false;
@@ -699,6 +716,7 @@ void crequest(int client_socket)
 
 int main()
 {
+    // Create a socket
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
