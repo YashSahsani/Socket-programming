@@ -105,8 +105,6 @@ int isFutureDate(char *givenDate)
     time_t givenDateInSeconds = mktime(&givenDateStruct);
 
     // Compare givenDate with current date
-    printf("Given date: %ld\n", givenDateInSeconds);
-    printf("Current date: %ld\n", now);
     if (givenDateInSeconds > now)
     {
         return 1; // givenDate is a future date
