@@ -244,7 +244,7 @@ void fetchDirNamesFromTime(int socketId)
     char *home_directory = getenv("HOME");
 
     // Construct the find command to list directories under the home directory
-    sprintf(command, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*' -printf '%%T@ %%p\\n' | sort -n -k1 | cut -d' ' -f2-", home_directory);
+    sprintf(command, "find %s -mindepth 1 -maxdepth 2 -type d ! -path '*/.*' -printf '%%T@ %%p\n' | sort -n | cut -d' ' -f2- | xargs -I{} stat -c '%%w %%n' '{}' | sort -n | cut -d' ' -f4-", home_directory);
 
     // Open the command for reading
     fp = popen(command, "r");
@@ -324,6 +324,33 @@ void fetchDirNamesFromPath(int socketId)
     }
 }
 
+char* getCreatedAtDate(const char *fpath)
+{
+    char stat_command[500];
+    snprintf(stat_command, sizeof(stat_command),  "stat -c '%%w' \"%s\"", fpath);
+    FILE *ls_fp = popen(stat_command, "r");
+    if (ls_fp == NULL)
+    {
+        perror("Failed to execute stat command");
+        return NULL;
+    }
+
+    char line[256];
+    char *date_created = (char *)malloc(20 * sizeof(char)); // Allocate memory for date_created
+    if (fgets(line, sizeof(line), ls_fp) != NULL)
+    {
+        sscanf(line, "%s", date_created);
+    }
+    else
+    {
+        free(date_created); // Free memory in case of failure
+        date_created = NULL;
+    }
+
+    pclose(ls_fp);
+    return date_created;
+}
+
 static int display_info(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
 {
     if (tflag == FTW_F)
@@ -342,10 +369,7 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
         }
         else if (isLessThanDateOption)
         {
-            struct tm *timeinfo;
-            timeinfo = localtime(&sb->st_mtime);
-            char dateStr[11];
-            strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
+            char *dateStr = getCreatedAtDate(fpath);
             int daysDifference = checkDate(date, dateStr);
             if (daysDifference >= 0)
             {
@@ -354,10 +378,7 @@ static int display_info(const char *fpath, const struct stat *sb, int tflag, str
         }
         else if (isGreaterThanDateOption)
         {
-            struct tm *timeinfo;
-            timeinfo = localtime(&sb->st_mtime);
-            char dateStr[11];
-            strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
+            char *dateStr = getCreatedAtDate(fpath);
             int daysDifference = checkDate(date, dateStr);
             if (daysDifference <= 0)
             {
