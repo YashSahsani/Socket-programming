@@ -27,8 +27,15 @@ typedef struct
 // Function to receive a file from the server
 void receive_file(int server_socket)
 {
-    char filename[] = "w24project/temp.tar.gz"; // Destination file name
-    FILE *file = fopen(filename, "wb"); // Open file in write binary mode
+    char filename[256];
+    char *home_directory = getenv("HOME");
+    if (home_directory == NULL)
+    {
+        perror("Failed to get home directory");
+        return;
+    }
+    snprintf(filename, sizeof(filename), "%s/%s", home_directory, "w24project/temp.tar.gz"); // Destination file name
+    FILE *file = fopen(filename, "wb");                                                      // Open file in write binary mode
     if (!file)
     {
         perror("Error opening file");
@@ -50,14 +57,13 @@ void receive_file(int server_socket)
     // Receive file data in chunks until total file size is received
     while (total_bytes_received < file_size)
     {
-        size_t bytes_received = recv(server_socket, buffer, sizeof(buffer), 0);  // Receive data
-        fwrite(buffer, 1, bytes_received, file); // Write received data to file
+        size_t bytes_received = recv(server_socket, buffer, sizeof(buffer), 0); // Receive data
+        fwrite(buffer, 1, bytes_received, file);                                // Write received data to file
         total_bytes_received += bytes_received;
     }
 
     fclose(file); // Close file
 }
-
 
 // Function to check if a date string is in valid format
 bool isValidDate(char *dateStr)
@@ -154,9 +160,17 @@ int validateCommand(char *command)
         char *extra;
         char *token = strtok(command, " ");
         token = strtok(NULL, " "); // Skip the first token ("w24fz")
+        if (token == NULL)
+        {
+            return 0;
+        }
         size1 = atoi(token);
 
         token = strtok(NULL, " "); // Get the second token
+         if (token == NULL)
+        {
+            return 0;
+        }
         size2 = atoi(token);
 
         token = strtok(NULL, " "); // Get the third token
@@ -182,8 +196,16 @@ int validateCommand(char *command)
         char *date;
         char *extra;
         char *token = strtok(command, " ");
+         if (token == NULL)
+        {
+            return 0;
+        }
         printf("%s\n", token);
         token = strtok(NULL, " "); // Skip the first token ("w24fdb")
+         if (token == NULL)
+        {
+            return 0;
+        }
         date = token;
         printf("%s\n", date);
         token = strtok(NULL, " "); // Get the third token
@@ -225,8 +247,16 @@ int validateCommand(char *command)
         char *date;
         char *extra;
         char *token = strtok(command, " ");
+         if (token == NULL)
+        {
+            return 0;
+        }
         printf("%s\n", token);
-        token = strtok(NULL, " "); // Skip the first token ("w24fdb")
+        token = strtok(NULL, " "); // Skip the first token ("w24fda")
+         if (token == NULL)
+        {
+            return 0;
+        }
         date = token;
         printf("%s\n", date);
         token = strtok(NULL, " "); // Get the third token
@@ -263,7 +293,14 @@ int validateCommand(char *command)
 
         char *extra;
         char *token = strtok(command, " ");
+         if (token == NULL)
+        {
+            return 0;
+        }
         token = strtok(NULL, " "); // Skip the first token ("w24fn")
+        if(token == NULL){
+             return 0;
+        }
         char *fileName = token;
         token = strtok(NULL, " "); // Get the third token
         extra = token;
@@ -272,7 +309,9 @@ int validateCommand(char *command)
             printf("Invalid command format.\n");
             return 0;
         }
-    } else if (strncmp(command, "dirlist -a", 10) == 0) {
+    }
+    else if (strncmp(command, "dirlist -a", 10) == 0)
+    {
         char *extra;
         char *token = strtok(command, " ");
         token = strtok(NULL, " "); // Skip the first token ("dirlist")
@@ -283,7 +322,9 @@ int validateCommand(char *command)
             printf("Invalid command format.\n");
             return 0;
         }
-    } else if(strncmp(command, "dirlist -t", 10) == 0){
+    }
+    else if (strncmp(command, "dirlist -t", 10) == 0)
+    {
         char *extra;
         char *token = strtok(command, " ");
         token = strtok(NULL, " "); // Skip the first token ("dirlist")
@@ -295,10 +336,11 @@ int validateCommand(char *command)
             return 0;
         }
     }
-    else if(strncmp(command, "quitc", 5) == 0){
+    else if (strncmp(command, "quitc", 5) == 0)
+    {
         char *extra;
         char *token = strtok(command, " ");
-        token = strtok(NULL, " "); 
+        token = strtok(NULL, " ");
         extra = token;
         if (extra != NULL)
         {
@@ -342,28 +384,33 @@ int ConnectToMirrorServer(const char *mirrorIp, int mirrorPort)
 }
 
 // Function to create a directory if it does not exist
-void createDirectoryIfNotExists(const char *dirName) {
+void createDirectoryIfNotExists(const char *dirName)
+{
     DIR *dir = opendir(dirName);
-    if (dir) {
+    if (dir)
+    {
         // Directory exists
         closedir(dir);
-    } else {
+    }
+    else
+    {
         // Directory does not exist, create it
-        if (mkdir(dirName, 0777) == -1) {
+        if (mkdir(dirName, 0777) == -1)
+        {
             printf("Failed to create directory %s\n", dirName);
             exit(EXIT_FAILURE);
         }
-        printf("Directory %s created successfully.\n", dirName);
     }
 }
 
 // Signal handler function to handle SIGINT signal (Ctrl+C)
 void signalHandler(int signal)
 {
-   if(signal == SIGINT){
-       send(sock, "quitc", strlen("quitc"), 0);
-       exit(0);
-   }
+    if (signal == SIGINT)
+    {
+        send(sock, "quitc", strlen("quitc"), 0);
+        exit(0);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -378,7 +425,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-// Socket creation and connection to server
+    // Socket creation and connection to server
     char *serverIP = argv[1];
     int serverPort = atoi(argv[2]);
 
@@ -432,7 +479,16 @@ int main(int argc, char *argv[])
     while (true)
     {
         // Creating directory if not exists
-        createDirectoryIfNotExists("w24project");
+        char filename[256];
+        char *home_directory = getenv("HOME");
+        if (home_directory == NULL)
+        {
+            perror("Failed to get home directory");
+            return;
+        }
+        snprintf(filename, sizeof(filename), "%s/%s", home_directory, "w24project");
+
+        createDirectoryIfNotExists(filename);
         fflush(stdout);
         printf("Enter message to send: ");
         fgets(message, BUFFER_SIZE, stdin); // Getting user input message
@@ -489,7 +545,8 @@ int main(int argc, char *argv[])
                 perror("recv failed");
                 exit(EXIT_FAILURE);
             }
-            if(bytesReceived == 0){
+            if (bytesReceived == 0)
+            {
                 printf("No file found\n");
                 continue;
             }
@@ -499,7 +556,8 @@ int main(int argc, char *argv[])
 
             // Parse the received string to extract file details
             char *token = strtok(fileDetailsString, ";");
-            if(strcmp(token, "File not found\n") == 0){
+            if (strcmp(token, "File not found\n") == 0)
+            {
                 printf("File not found\n");
                 continue;
             }
@@ -544,8 +602,9 @@ int main(int argc, char *argv[])
                 printf("%s", buffer);
             }
         }
-        if(strstr(message, "dirlist -t") != NULL){
-           char buffer[BUFFER_SIZE];
+        if (strstr(message, "dirlist -t") != NULL)
+        {
+            char buffer[BUFFER_SIZE];
             int bytesReceived;
 
             // Receive data until "COMPLETED_" is received
@@ -574,7 +633,8 @@ int main(int argc, char *argv[])
                 printf("%s", buffer);
             }
         }
-        if(strstr(message, "quitc") != NULL){
+        if (strstr(message, "quitc") != NULL)
+        {
             break;
         }
     }
